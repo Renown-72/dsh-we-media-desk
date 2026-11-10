@@ -1,7 +1,9 @@
-// 前端存储适配层：优先用 localStorage（浏览器原生、刷新不丢）。
-// 预留 host 通道挂点，未来可切到 DSH host 的 state.json 读写。
+// 前端存储适配层：
+// - localStorage：本浏览器缓存，打开即有数据，host 不可用时兜底。
+// - hostBridge：通过 /we-media-desk/ideas 读写 DSH host 上的 state.json（以它为准）。
 
 const KEY = 'we-media-desk:ideas'
+const IDEAS_API = '/we-media-desk/ideas'
 
 function hasLocalStorage() {
   try {
@@ -35,9 +37,36 @@ export function saveIdeas(ideas) {
   }
 }
 
-// 未来接入 DSH host 通道时，把读写实现替换成这里。
+async function request(url, init) {
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    ...init,
+    headers: { accept: 'application/json', ...(init?.headers || {}) },
+  })
+  let body = null
+  try { body = await res.json() } catch { /* 非 JSON 响应 */ }
+  if (!res.ok || !body || body.ok === false) {
+    throw new Error(body?.error || `HTTP ${res.status}`)
+  }
+  return body
+}
+
+// 保存请求串行发出，保证后发的不会被先发的覆盖。
+let saveChain = Promise.resolve()
+
 export const hostBridge = {
-  enabled: false,
-  async load() { return null },
-  async save() { return false },
+  async load() {
+    const body = await request(IDEAS_API)
+    if (!Array.isArray(body.ideas)) throw new Error('host 返回的数据格式不对')
+    return body.ideas
+  },
+  save(ideas) {
+    const run = saveChain.then(() => request(IDEAS_API, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ideas }),
+    }))
+    saveChain = run.catch(() => {})
+    return run
+  },
 }

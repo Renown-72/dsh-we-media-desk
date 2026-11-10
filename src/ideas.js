@@ -71,3 +71,38 @@ export function collectTags(list) {
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
 }
+
+// 把外部传入（前端 / 旧数据）的灵感清洗成合法结构；不合法返回 null。
+export function normalizeIdea(raw, now = Date.now()) {
+  if (!raw || typeof raw !== 'object') return null
+  const text = String(raw.text ?? '').trim().slice(0, 2000)
+  const id = String(raw.id ?? '').trim().slice(0, 64)
+  if (!text || !id) return null
+  const num = v => (Number.isFinite(v) && v > 0 ? v : null)
+  const createdAt = num(raw.createdAt) ?? num(raw.updatedAt) ?? now
+  return {
+    id,
+    text,
+    tags: parseTags(Array.isArray(raw.tags) ? raw.tags : []),
+    pinned: raw.pinned === true,
+    archived: raw.archived === true,
+    createdAt,
+    updatedAt: num(raw.updatedAt) ?? createdAt,
+  }
+}
+
+// 清洗整个列表：丢弃非法项，按 id 去重（保留先出现的），限制总数。
+export const MAX_IDEAS = 5000
+export function normalizeIdeas(list, now = Date.now()) {
+  if (!Array.isArray(list)) return []
+  const out = []
+  const seen = new Set()
+  for (const raw of list) {
+    const it = normalizeIdea(raw, now)
+    if (!it || seen.has(it.id)) continue
+    seen.add(it.id)
+    out.push(it)
+    if (out.length >= MAX_IDEAS) break
+  }
+  return out
+}

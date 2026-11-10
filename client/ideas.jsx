@@ -1,9 +1,11 @@
 // 灵感面板：记录、搜索、筛选、置顶、编辑、归档、删除。
 import React from 'react'
 import { createIdea, sortIdeas, filterIdeas, collectTags, parseTags } from '../src/ideas.js'
-import { loadIdeas, saveIdeas } from './storage.js'
+import { loadIdeas, saveIdeas, hostBridge } from './storage.js'
 
-const { useState, useMemo, useEffect } = React
+const { useState, useMemo, useEffect, useRef } = React
+
+const SAVE_DELAY = 300
 
 function TagChip({ tag, count, active, onClick }) {
   return (
@@ -65,8 +67,58 @@ export function IdeasPanel() {
   const [query, setQuery] = useState('')
   const [activeTag, setActiveTag] = useState('')
 
-  // 变更后持久化（刷新不丢）
-  useEffect(() => { saveIdeas(ideas) }, [ideas])
+  // 同步状态：loading 正在连 host；host 已与 host 同步；local 只存在本浏览器
+  const [sync, setSync] = useState('loading')
+  const hostReady = useRef(false)   // 首次从 host 读完之前不往 host 写，避免旧缓存覆盖
+  const lastSynced = useRef('')     // 上次成功写入 host 的内容，用来跳过重复保存
+  const pending = useRef(null)      // 等待写入 host 的最新列表
+  const alive = useRef(true)
+
+  function flushToHost() {
+    const list = pending.current
+    if (!list) return
+    pending.current = null
+    const snapshot = JSON.stringify(list)
+    hostBridge.save(list).then(
+      () => { lastSynced.current = snapshot; if (alive.current) setSync('host') },
+      () => { if (alive.current) setSync('local') },
+    )
+  }
+
+  // 启动时以 host 为准；host 还没有数据时，把本地已有的灵感迁移上去。
+  useEffect(() => {
+    alive.current = true
+    const mountedAt = Date.now()
+    hostBridge.load().then(remote => {
+      if (!alive.current) return
+      hostReady.current = true
+      if (remote.length === 0) {
+        setIdeas(prev => [...prev]) // 触发一次保存，把本地数据迁移到 host
+      } else {
+        lastSynced.current = JSON.stringify(remote)
+        // 保留加载期间新记下、host 上还没有的灵感
+        setIdeas(prev => {
+          const ids = new Set(remote.map(it => it.id))
+          const fresh = prev.filter(it => !ids.has(it.id) && (it.createdAt ?? 0) >= mountedAt)
+          return fresh.length ? [...fresh, ...remote] : remote
+        })
+      }
+      setSync('host')
+    }, () => {
+      if (alive.current) setSync('local')
+    })
+    return () => { alive.current = false; flushToHost() } // 切走页面时立刻写完未保存的改动
+  }, [])
+
+  // 变更后持久化：本地立即写，host 防抖写
+  useEffect(() => {
+    saveIdeas(ideas)
+    if (!hostReady.current) return
+    if (JSON.stringify(ideas) === lastSynced.current) return
+    pending.current = ideas
+    const timer = setTimeout(flushToHost, SAVE_DELAY)
+    return () => clearTimeout(timer)
+  }, [ideas])
 
   function add() {
     const text = draft.trim()
@@ -116,6 +168,9 @@ export function IdeasPanel() {
         />
         <button className="wk-btn" onClick={add}>记下</button>
       </div>
+      {sync === 'local' && (
+        <p className="wk-sync is-local">未连接到 DSH 后台，灵感暂时只保存在本浏览器。</p>
+      )}
 
       {/* 搜索 / 筛选 */}
       {ideas.length > 0 && (

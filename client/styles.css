@@ -72,3 +72,5 @@
 .wk-chip.is-active { background: #111827; color: #fff; border-color: #111827; }
 
 .wk-empty { color: #9ca3af; font-size: 14px; text-align: center; padding: 24px; }
+.wk-sync { font-size: 12px; margin: -8px 0 12px; color: #9ca3af; }
+.wk-sync.is-local { color: #b45309; }

@@ -50,3 +50,19 @@ test('collectTags 统计非归档标签并按数量倒序', () => {
   ]
   assert.deepEqual(collectTags(list), [{ tag: 'a', count: 2 }, { tag: 'b', count: 1 }])
 })
+
+test('normalizeIdeas 丢弃非法项、按 id 去重、补全字段', async () => {
+  const { normalizeIdeas } = await import('../src/ideas.js')
+  const out = normalizeIdeas([
+    { id: 'a', text: ' 第一条 ', tags: ['#x', 'x'], pinned: 'yes', createdAt: 5 },
+    { id: 'a', text: '重复 id' },
+    { id: 'b', text: '   ' },
+    { text: '缺 id' },
+    null,
+    'str',
+  ], 100)
+  assert.deepEqual(out, [{
+    id: 'a', text: '第一条', tags: ['x'], pinned: false, archived: false, createdAt: 5, updatedAt: 5,
+  }])
+  assert.deepEqual(normalizeIdeas('not array'), [])
+})
