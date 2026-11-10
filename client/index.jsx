@@ -2,6 +2,7 @@
 // DSH 客户端模块系统会懒加载本文件，宿主提供 React。
 import React from 'react'
 import styles from './styles.css'
+import { IdeasPanel } from './ideas.jsx'
 
 const { useState } = React
 
@@ -13,37 +14,6 @@ const TABS = [
   { id: 'review', label: '复盘' },
   { id: 'style', label: '风格' },
 ]
-
-function IdeasPanel() {
-  const [ideas, setIdeas] = useState([])
-  const [draft, setDraft] = useState('')
-
-  function add() {
-    const text = draft.trim()
-    if (!text) return
-    setIdeas([{ id: String(Date.now()), text }, ...ideas])
-    setDraft('')
-  }
-
-  return (
-    <div className="wk-panel">
-      <div className="wk-row">
-        <input
-          className="wk-input"
-          value={draft}
-          placeholder="记一句灵感，回车保存…"
-          onChange={e => setDraft(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && add()}
-        />
-        <button className="wk-btn" onClick={add}>记下</button>
-      </div>
-      <ul className="wk-list">
-        {ideas.map(it => <li key={it.id} className="wk-card">{it.text}</li>)}
-        {ideas.length === 0 && <li className="wk-empty">还没有灵感，先记一条吧</li>}
-      </ul>
-    </div>
-  )
-}
 
 function Placeholder({ name }) {
   return <div className="wk-panel"><p className="wk-empty">{name}页面（待开发）</p></div>
