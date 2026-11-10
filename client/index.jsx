@@ -43,9 +43,19 @@ export function App() {
   )
 }
 
-// 侧栏图标/入口
-export function SidebarEntry() {
-  return React.createElement('div', { className: 'wk-sidebar-entry' }, '📝 自媒体工作台')
+// 侧栏图标：使用 DSH 自带图标系统（dsw-icon-* sprite），与其他插件完全一致。
+// DSH 的 sidebar.panellist 图标组件接收 { size }。
+export function SidebarEntry({ size = 16 } = {}) {
+  return React.createElement(
+    'svg',
+    {
+      width: size,
+      height: size,
+      'data-icon': 'dsw-icon-list-pen-outline-regular',
+      'aria-hidden': 'true',
+    },
+    React.createElement('use', { href: '#dsw-icon-list-pen-outline-regular' }),
+  )
 }
 
 // DSH 客户端插件约定：inject slots，apply 里注册槽位。
