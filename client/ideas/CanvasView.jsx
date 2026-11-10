@@ -1,4 +1,4 @@
-// 画布（自由白板）：拖卡片摆位置；拖空白处平移（松手有惯性）；滚轮平移，Ctrl+滚轮缩放。
+// 画布（自由白板）：拖卡片摆位置；拖空白处平移（松手有惯性）；滚轮在鼠标处缩放，Shift+滚轮平移。
 // 镜头移动带缓动；新灵感落在视野外时镜头会带过去；“相关”时相关卡片聚到中心卡片周围。
 import React from 'react'
 import { IdeaCard } from './IdeaCard.jsx'
@@ -195,12 +195,18 @@ export function CanvasView({
       e.preventDefault()
       stop()
       const rect = el.getBoundingClientRect()
-      if (e.ctrlKey || e.metaKey) {
-        const factor = Math.exp(-e.deltaY * 0.0015)
-        setView(v => zoomAt(v, v.zoom * factor, e.clientX - rect.left, e.clientY - rect.top))
-      } else {
-        setView(v => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }))
+      // 按行滚动的设备（deltaMode=1）换算成像素
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1
+      if (e.shiftKey) {
+        // Shift+滚轮：平移（横向滚动的设备直接用 deltaX）
+        const dx = (e.deltaX || e.deltaY) * unit
+        setView(v => ({ ...v, x: v.x - dx, y: v.y - (e.deltaX ? e.deltaY * unit : 0) }))
+        return
       }
+      // 滚轮：以鼠标所在位置为中心缩放。触控板双指捏合（带 ctrlKey）的增量小，灵敏度调高
+      const k = e.ctrlKey ? 0.01 : 0.0015
+      const factor = Math.exp(Math.max(-0.5, Math.min(0.5, -e.deltaY * unit * k)))
+      setView(v => zoomAt(v, v.zoom * factor, e.clientX - rect.left, e.clientY - rect.top))
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
