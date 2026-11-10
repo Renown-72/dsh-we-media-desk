@@ -1,22 +1,24 @@
-// 灵感页：首屏（日期、统计、录入框）+ 画布 / 信息流两种视图，共用一套筛选；
-// 记下新灵感或点“相关”时，把相关的旧灵感找出来。
+// 灵感页：周表（本周概览）+ 画布 / 信息流两种视图，共用一套筛选；
+// 底部 ＋ 打开录入框；记下新灵感或点“相关”时，把相关的旧灵感找出来。
 import React from 'react'
 import { KINDS, sortIdeas, filterIdeas, collectTags, countKinds, splitHashtags } from '../../src/ideas.js'
 import { useIdeas } from './useIdeas.js'
-import { mediaFilesOf } from './Composer.jsx'
-import { Hero } from './Hero.jsx'
+import { Composer, mediaFilesOf } from './Composer.jsx'
+import { WeekBoard } from './WeekBoard.jsx'
+import { IdeaCard } from './IdeaCard.jsx'
 import { FeedView } from './FeedView.jsx'
 import { CanvasView } from './CanvasView.jsx'
 import { relatedIdeas } from './related.js'
-import { ideaStats } from './stats.js'
-import { autoPlace, toWorld, cardSize, rectOf, findFreeSpot, placeHero, heroRect } from './layout.js'
+import { weekStats } from './stats.js'
+import { autoPlace, toWorld, cardSize, rectOf, findFreeSpot, boardRect, overlapsBoard, BOARD_SIZE } from './layout.js'
 import { Icon } from '../icons.jsx'
 
 const { useState, useMemo, useEffect, useRef, useCallback } = React
 
 const MODE_KEY = 'we-media-desk:ideas-mode'
 const CANVAS_KEY = 'we-media-desk:canvas-view'
-const HERO_KEY = 'we-media-desk:hero-pos'
+const BOARD_KEY = 'we-media-desk:board-center'
+const OLD_HERO_KEY = 'we-media-desk:hero-pos' // 旧版首屏的左上角位置（600×340）
 const HIGHLIGHT_MS = 2400
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 0.9 }
 const KIND_ICON = { text: 'text', image: 'image', link: 'link', video: 'play' }
@@ -133,6 +135,10 @@ export function IdeasPanel() {
   const [highlight, setHighlight] = useState('')   // 刚记下的灵感，短暂高亮
   const [related, setRelated] = useState(null)     // { anchorId, ids, label }
   const [homeTick, setHomeTick] = useState(0)
+  const [captureOpen, setCaptureOpen] = useState(false)
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [detailId, setDetailId] = useState('')      // 信息流里从周表点开的灵感
+  const [focus, setFocus] = useState(null)           // 画布上要飞过去的卡片 { id, n }
   const composerRef = useRef(null)
   const searchRef = useRef(null)
 
@@ -157,18 +163,23 @@ export function IdeasPanel() {
     if (changed) setSizeTick(t => t + 1)
   }, [])
 
-  // 首屏在画布上的位置：第一次打开画布时在原点附近找空位，之后固定
-  const [heroPos, setHeroPos] = useState(() => {
-    const p = readLocal(HERO_KEY, null)
-    return validPoint(p) ? p : null
+  // 周表在画布上的位置（中心点）。沿用旧版首屏的中心，没有就放在原点
+  const [boardCenter] = useState(() => {
+    const c = readLocal(BOARD_KEY, null)
+    if (validPoint(c)) return c
+    const old = readLocal(OLD_HERO_KEY, null)
+    const center = validPoint(old) ? { x: old.x + 300, y: old.y + 170 } : { x: 0, y: 0 }
+    writeLocal(BOARD_KEY, center)
+    return center
   })
+  const hero = useMemo(() => boardRect(boardCenter), [boardCenter])
+
+  // 压在周表上的卡片（比如周表变大了、或者被拖上去）挪到旁边的空位
   useEffect(() => {
-    if (mode !== 'canvas' || heroPos || store.sync === 'loading') return
-    const p = placeHero(ideasRef.current, sizesRef.current)
-    setHeroPos(p)
-    writeLocal(HERO_KEY, p)
-  }, [mode, heroPos, store.sync])
-  const hero = useMemo(() => (heroPos ? heroRect(heroPos) : null), [heroPos])
+    if (mode !== 'canvas' || store.sync === 'loading') return
+    const ids = overlapsBoard(ideas, hero, sizesRef.current)
+    if (ids.length) store.unplace(ids)
+  }, [mode, ideas, hero, sizeTick, store.sync, store.unplace])
 
   useEffect(() => { writeLocal(MODE_KEY, mode) }, [mode])
   useEffect(() => {
@@ -177,11 +188,12 @@ export function IdeasPanel() {
     return () => clearTimeout(t)
   }, [view])
 
-  // 第一次打开画布：首屏放在视野中央
+  // 第一次打开画布：周表放在视野中央，缩放到正好看全
   useEffect(() => {
-    if (mode !== 'canvas' || view || !hero || !viewportRef.current) return
+    if (mode !== 'canvas' || view || !viewportRef.current) return
     const el = viewportRef.current
-    setView({ zoom: 1, x: Math.round(el.clientWidth / 2 - (hero.x + hero.w / 2)), y: Math.round(el.clientHeight / 2 - (hero.y + hero.h / 2)) })
+    const zoom = Math.min(1, (el.clientHeight - 150) / BOARD_SIZE.h, (el.clientWidth - 80) / BOARD_SIZE.w)
+    setView({ zoom, x: Math.round(el.clientWidth / 2 - (hero.x + hero.w / 2) * zoom), y: Math.round(el.clientHeight / 2 - (hero.y + hero.h / 2) * zoom) })
   }, [mode, view, hero])
 
   // 画布：给还没有位置的灵感自动找空位（围着首屏）。
@@ -247,8 +259,20 @@ export function IdeasPanel() {
     return added
   }, [store.addFiles, flash])
 
-  const onHeroText = useCallback((text, tags) => addText(text, tags), [addText])
-  const onHeroFiles = useCallback((files, opts) => addFiles(files, opts), [addFiles])
+  // ＋ 弹出的录入框：记下后自动收起
+  const onCaptureText = useCallback((text, tags) => { const it = addText(text, tags); setCaptureOpen(false); return it }, [addText])
+  const onCaptureFiles = useCallback((files, opts) => { setCaptureOpen(false); return addFiles(files, opts) }, [addFiles])
+  useEffect(() => { if (captureOpen) setTimeout(() => composerRef.current?.focus(), 30) }, [captureOpen])
+
+  // 从周表点开某条灵感：画布上飞过去，信息流里弹出卡片
+  const openIdea = useCallback(id => {
+    if (modeRef.current === 'canvas' && canvasIdsRef.current.has(id)) {
+      setFocus(f => ({ id, n: (f?.n || 0) + 1 }))
+      setHighlight(id)
+    } else {
+      setDetailId(id)
+    }
+  }, [])
 
   // 页面任意处粘贴（输入框内的粘贴交给输入框自己处理）
   useEffect(() => {
@@ -263,13 +287,20 @@ export function IdeasPanel() {
     return () => document.removeEventListener('paste', onPaste)
   }, [addFiles, addText])
 
-  // 快捷键：Esc 依次关大图、筛选、相关；/ 打开搜索
+  // 快捷键：Esc 依次关大图、卡片、录入框、筛选、相关；/ 打开搜索；N 记灵感
   useEffect(() => {
     const onKey = e => {
       if (e.key === 'Escape') {
         if (lightbox) setLightbox('')
+        else if (detailId) setDetailId('')
+        else if (captureOpen) setCaptureOpen(false)
         else if (filterOpen) setFilterOpen(false)
         else if (related) setRelated(null)
+        return
+      }
+      if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey && !e.altKey && !isEditable(document.activeElement)) {
+        e.preventDefault()
+        setCaptureOpen(true)
         return
       }
       if (e.key === '/' && !isEditable(document.activeElement)) {
@@ -280,15 +311,21 @@ export function IdeasPanel() {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [lightbox, related, filterOpen])
+  }, [lightbox, related, filterOpen, captureOpen, detailId])
 
-  // 点筛选面板外面时收起
+  // 点面板外面时收起
   useEffect(() => {
     if (!filterOpen) return
     const close = e => { if (!e.target.closest('.wk-filter-wrap')) setFilterOpen(false) }
     document.addEventListener('pointerdown', close)
     return () => document.removeEventListener('pointerdown', close)
   }, [filterOpen])
+  useEffect(() => {
+    if (!captureOpen) return
+    const close = e => { if (!e.target.closest('.wk-capture, .wk-fab')) setCaptureOpen(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [captureOpen])
 
   // 相关的灵感被删掉时同步更新
   useEffect(() => {
@@ -315,7 +352,7 @@ export function IdeasPanel() {
     if (text) { try { addText(text.trim(), [], point) } catch { /* ignore */ } }
   }
 
-  const stats = useMemo(() => ideaStats(ideas), [ideas])
+  const stats = useMemo(() => weekStats(ideas, { offset: weekOffset }), [ideas, weekOffset])
   const tags = useMemo(() => collectTags(ideas), [ideas])
   const kindCounts = useMemo(() => countKinds(ideas), [ideas])
   const visible = useMemo(
@@ -333,6 +370,11 @@ export function IdeasPanel() {
   }, [visible, related, byId])
 
   const archivedCount = useMemo(() => ideas.filter(i => i.archived).length, [ideas])
+  const totalCount = ideas.length - archivedCount
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  const canvasIdsRef = useRef(new Set())
+  canvasIdsRef.current = new Set(canvasItems.map(it => it.id))
   const filterCount = (query ? 1 : 0) + (activeTag ? 1 : 0) + (showArchived ? 1 : 0)
 
   function toggleKind(id) {
@@ -342,9 +384,7 @@ export function IdeasPanel() {
     setQuery(''); setActiveTag(''); setKinds([]); setShowArchived(false)
   }
   function compose() {
-    if (mode === 'canvas') setHomeTick(t => t + 1)
-    else document.querySelector('.wk-feed-scroll')?.scrollTo({ top: 0, behavior: 'smooth' })
-    setTimeout(() => composerRef.current?.focus(), mode === 'canvas' ? 350 : 200)
+    setCaptureOpen(v => !v)
   }
 
   const onRelated = useCallback(id => {
@@ -352,6 +392,9 @@ export function IdeasPanel() {
     if (it) showRelated(it, { always: true })
   }, [showRelated])
   const closeRelated = useCallback(() => setRelated(null), [])
+  const prevWeek = useCallback(() => setWeekOffset(o => o - 1), [])
+  const nextWeek = useCallback(() => setWeekOffset(o => Math.min(0, o + 1)), [])
+  const thisWeek = useCallback(() => setWeekOffset(0), [])
   const pickTag = useCallback(t => { setActiveTag(t); setFilterOpen(true) }, [])
 
   // 保持稳定，卡片才能跳过不必要的重绘
@@ -363,10 +406,20 @@ export function IdeasPanel() {
     onOpenImage: setLightbox,
     onTag: pickTag,
     onRelated,
-  }), [store.togglePin, store.toggleArchive, store.remove, store.update, onRelated, pickTag])
+    onDone: store.toggleDone,
+  }), [store.togglePin, store.toggleArchive, store.remove, store.update, store.toggleDone, onRelated, pickTag])
 
-  const heroNode = <Hero stats={stats} composerRef={composerRef} onText={onHeroText} onFiles={onHeroFiles} />
-  const emptyText = ideas.length === 0 ? '还没有灵感，从上面记下第一条吧' : '没有符合筛选条件的灵感'
+  const boardNode = (
+    <WeekBoard
+      stats={stats}
+      onPrev={prevWeek}
+      onNext={nextWeek}
+      onThisWeek={thisWeek}
+      onOpenIdea={openIdea}
+    />
+  )
+  const emptyText = ideas.length === 0 ? '还没有灵感，点下方的 ＋ 记下第一条' : '没有符合筛选条件的灵感'
+  const detail = detailId && ideas.find(it => it.id === detailId)
 
   return (
     <div
@@ -387,15 +440,16 @@ export function IdeasPanel() {
           related={related}
           onCloseRelated={closeRelated}
           highlight={highlight}
-          heroPos={heroPos}
-          hero={heroNode}
+          board={hero}
+          boardNode={boardNode}
           homeTick={homeTick}
+          focus={focus}
           sizes={sizesRef.current}
           onMeasure={onMeasure}
         />
       ) : (
         <div className="wk-feed-scroll">
-          <div className="wk-feed-hero">{heroNode}</div>
+          <div className="wk-feed-hero">{boardNode}</div>
           <div className="wk-feed-wrap">
             <FeedView
               items={visible}
@@ -450,12 +504,18 @@ export function IdeasPanel() {
           ))}
         </div>
         <span className="wk-sep" />
-        <button className="wk-fab" onClick={compose} title="记下灵感"><Icon name="plus" size={20} stroke={2.2} /></button>
+        <button className={'wk-fab' + (captureOpen ? ' is-open' : '')} onClick={compose} title="记下灵感（N）"><Icon name="plus" size={20} stroke={2.2} /></button>
       </div>
+
+      {captureOpen && (
+        <div className="wk-capture" role="dialog" aria-label="记下灵感">
+          <Composer ref={composerRef} onText={onCaptureText} onFiles={onCaptureFiles} />
+        </div>
+      )}
 
       {(activeTag || query || kinds.length > 0) && !filterOpen && (
         <div className="wk-float wk-filter-note">
-          显示 {visible.length} / {stats.total} 条
+          显示 {visible.length} / {totalCount} 条
           {activeTag && <span className="wk-hint-tag">#{activeTag}</span>}
           {query && <span className="wk-hint-tag">“{query}”</span>}
           <button className="wk-btn-text" onClick={clearFilters}>清除</button>
@@ -465,6 +525,14 @@ export function IdeasPanel() {
       <Toasts uploads={store.uploads} onDismiss={store.dismissUpload} />
 
       {dropping && <div className="wk-dropzone"><Icon name="attach" size={22} />松手添加到灵感</div>}
+
+      {detail && (
+        <div className="wk-modal" onPointerDown={e => { if (e.target === e.currentTarget) setDetailId('') }}>
+          <div className="wk-modal-card">
+            <IdeaCard idea={detail} variant="feed" {...cardProps} />
+          </div>
+        </div>
+      )}
 
       {lightbox && (
         <div className="wk-lightbox" onClick={() => setLightbox('')}>

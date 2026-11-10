@@ -138,17 +138,18 @@ function centerOf(rects) {
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
 }
 
-// 首屏（日期、统计、输入框）在画布上占的位置
-export const HERO_SIZE = { w: 600, h: 340 }
+// 周表卡片在画布上占的区域（以中心点定位）
+export const BOARD_SIZE = { w: 720, h: 720 }
 
-// 首屏放在原点附近的空位（已有卡片不动）
-export function placeHero(ideas, sizes) {
-  const placed = ideas.filter(it => it.pos).map(it => rectOf(it, it.pos, sizes))
-  return findFreeSpot(HERO_SIZE, { x: 0, y: 0 }, placed, { gap: 40 })
+export function boardRect(center) {
+  return { x: Math.round(center.x - BOARD_SIZE.w / 2), y: Math.round(center.y - BOARD_SIZE.h / 2), ...BOARD_SIZE }
 }
 
-export function heroRect(pos) {
-  return { x: pos.x, y: pos.y, ...HERO_SIZE }
+// 和周表重叠的卡片（需要挪开）
+export function overlapsBoard(ideas, board, sizes, gap = 16) {
+  return ideas
+    .filter(it => it.pos && overlaps(rectOf(it, it.pos, sizes), board, gap))
+    .map(it => it.id)
 }
 
 // 返回 { [id]: {x, y} }：已有位置的不动；没位置的按从新到旧，

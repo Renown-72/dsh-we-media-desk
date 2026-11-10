@@ -4,7 +4,7 @@ import React from 'react'
 import { IdeaCard } from './IdeaCard.jsx'
 import { Icon } from '../icons.jsx'
 import {
-  cardSize, rectOf, tilt, zoomAt, fitRects, findFreeSpot, rectVisible, centerOn, heroRect,
+  cardSize, rectOf, tilt, zoomAt, fitRects, findFreeSpot, rectVisible, centerOn,
 } from './layout.js'
 
 const { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } = React
@@ -102,7 +102,7 @@ const CanvasItem = React.memo(function CanvasItem({ idea, x, y, w, z, angle, dra
 
 export function CanvasView({
   items, positions, view, setView, viewportRef, cardProps, onMove,
-  related, onCloseRelated, highlight, heroPos, hero, homeTick, sizes, onMeasure,
+  related, onCloseRelated, highlight, board, boardNode, homeTick, focus, sizes, onMeasure,
 }) {
   // 一个 ResizeObserver 观察所有卡片，尺寸变化批量回报
   const onMeasureRef = useRef(onMeasure)
@@ -178,14 +178,23 @@ export function CanvasView({
     }
   }, [highlight]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 回到首屏（点 + 号时）：镜头移到首屏，缩放回 100%
+  // 回到周表：镜头移到周表中央，缩放到正好看全
   const goHome = useCallback(() => {
     const el = viewportRef.current
-    if (!el || !heroPos) return
-    const r = heroRect(heroPos)
-    animateTo(centerOn({ ...viewRef.current, zoom: 1 }, r, el.clientWidth, el.clientHeight))
-  }, [heroPos, animateTo, viewportRef, viewRef])
+    if (!el || !board) return
+    animateTo(fitRects([board], el.clientWidth, el.clientHeight, { padding: 72, maxZoom: 1 }))
+  }, [board, animateTo, viewportRef])
   useEffect(() => { if (homeTick) goHome() }, [homeTick]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 从周表点某条灵感：镜头移到那张卡片
+  useEffect(() => {
+    const el = viewportRef.current
+    const it = focus && byId.get(focus.id)
+    if (!it || !el) return
+    const rect = rectOf(it, posOfRef.current(it), sizes)
+    const zoom = Math.max(viewRef.current.zoom, 0.85)
+    animateTo(centerOn({ ...viewRef.current, zoom }, rect, el.clientWidth, el.clientHeight))
+  }, [focus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 滚轮需要非 passive 监听才能阻止页面滚动
   useEffect(() => {
@@ -289,7 +298,7 @@ export function CanvasView({
   function fit() {
     const el = viewportRef.current
     const rects = items.map(it => rectOf(it, posOf(it), sizes))
-    if (heroPos) rects.push(heroRect(heroPos))
+    if (board) rects.push(board)
     animateTo(fitRects(rects, el.clientWidth, el.clientHeight))
   }
 
@@ -306,9 +315,9 @@ export function CanvasView({
       onPointerCancel={endGesture}
     >
       <div className="wk-canvas-world" style={{ transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.zoom})` }}>
-        {heroPos && (
-          <div className={'wk-hero-slot' + (related ? ' is-dim' : '')} style={{ left: heroPos.x, top: heroPos.y, width: heroRect(heroPos).w, height: heroRect(heroPos).h }}>
-            {hero}
+        {board && (
+          <div className={'wk-board-slot' + (related ? ' is-dim' : '')} style={{ left: board.x, top: board.y, width: board.w, height: board.h }}>
+            {boardNode}
           </div>
         )}
         {items.map(it => {
@@ -352,7 +361,7 @@ export function CanvasView({
         </button>
         <button className="wk-icon-btn" onClick={() => zoomBy(1.25)} title="放大"><Icon name="plus" size={16} /></button>
         <span className="wk-sep" />
-        <button className="wk-icon-btn" onClick={goHome} title="回到首屏"><Icon name="target" size={16} /></button>
+        <button className="wk-icon-btn" onClick={goHome} title="回到周表"><Icon name="target" size={16} /></button>
         <button className="wk-icon-btn" onClick={fit} title="显示全部"><Icon name="fit" size={16} /></button>
       </div>
     </div>

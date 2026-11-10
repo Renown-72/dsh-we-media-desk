@@ -146,3 +146,12 @@ test('groupByDay 按天分组并标出今天、昨天', () => {
   ], now)
   assert.deepEqual(groups.map(g => g.label), ['今天', '昨天', '2026-11-01'])
 })
+
+test('normalizeIdea 保留完稿状态并补完稿时间', () => {
+  const it = normalizeIdea({ id: 'd', text: 'x', done: true, updatedAt: 50, createdAt: 10 })
+  assert.equal(it.done, true)
+  assert.equal(it.doneAt, 50)
+  const no = normalizeIdea({ id: 'n', text: 'x', done: 'yes', doneAt: 5 })
+  assert.equal(no.done, undefined)
+  assert.equal(no.doneAt, undefined)
+})

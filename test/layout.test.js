@@ -101,17 +101,17 @@ test('masonryColumns 均衡分列，且保持时间顺序', () => {
   assert.equal(masonryColumns(items, 1, 240)[0].length, 12)
 })
 
-import { placeHero, heroRect, HERO_SIZE } from '../client/ideas/layout.js'
+import { boardRect, overlapsBoard, BOARD_SIZE } from '../client/ideas/layout.js'
 
-test('首屏放在原点附近的空位，自动摆放的卡片避开首屏', () => {
-  const empty = placeHero([])
-  assert.deepEqual(empty, { x: -HERO_SIZE.w / 2, y: -HERO_SIZE.h / 2 })
-  const blocker = { id: 'b', kind: 'text', text: 'x', tags: [], pos: { x: -100, y: -60 } }
-  const p = placeHero([blocker])
-  assert.ok(!overlap(heroRect(p), rectOf(blocker, blocker.pos)))
-
-  const hero = heroRect(empty)
+test('周表以中心点定位；自动摆放的卡片避开周表；能找出压在周表上的卡片', () => {
+  const board = boardRect({ x: 0, y: 0 })
+  assert.deepEqual(board, { x: -BOARD_SIZE.w / 2, y: -BOARD_SIZE.h / 2, ...BOARD_SIZE })
   const ideas = sample(40)
-  const out = autoPlace(ideas, { hero })
-  for (const it of ideas) assert.ok(!overlap(rectOf(it, out[it.id]), hero), it.id)
+  const out = autoPlace(ideas, { hero: board })
+  for (const it of ideas) assert.ok(!overlap(rectOf(it, out[it.id]), board), it.id)
+
+  const on = { id: 'on', kind: 'text', text: 'x', tags: [], pos: { x: -50, y: -50 } }
+  const off = { id: 'off', kind: 'text', text: 'x', tags: [], pos: { x: 2000, y: 0 } }
+  const loose = { id: 'loose', kind: 'text', text: 'x', tags: [] }
+  assert.deepEqual(overlapsBoard([on, off, loose], board), ['on'])
 })

@@ -130,7 +130,7 @@ function ActionBtn({ icon, label, onClick, danger, active }) {
   )
 }
 
-export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive, onDelete, onEdit, onOpenImage, onTag, onRelated }) {
+export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive, onDelete, onEdit, onOpenImage, onTag, onRelated, onDone }) {
   const [editing, setEditing] = useState(false)
   const kind = idea.kind || 'text'
   const isLinkish = (kind === 'link' || kind === 'video') && idea.url && !idea.file && !isDirectMedia(idea.url)
@@ -142,7 +142,7 @@ export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', h
 
   return (
     <article
-      className={`wk-card wk-card-${variant} is-${kind}` + (idea.pinned ? ' is-pinned' : '') + (idea.archived ? ' is-archived' : '')}
+      className={`wk-card wk-card-${variant} is-${kind}` + (idea.pinned ? ' is-pinned' : '') + (idea.archived ? ' is-archived' : '') + (idea.done ? ' is-done' : '')}
       {...handleProps}
     >
       <Media idea={idea} onOpenImage={onOpenImage} />
@@ -164,6 +164,7 @@ export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', h
 
       <footer className="wk-card-foot">
         <span className="wk-card-kind"><Icon name={KIND_ICON[kind]} size={12} />{KIND_LABEL[kind]}</span>
+        {idea.done && <span className="wk-card-done"><Icon name="check" size={12} stroke={2.4} />已完稿</span>}
         {idea.pinned && <span className="wk-card-pinned"><Icon name="pin" size={12} />置顶</span>}
         {idea.archived && <span className="wk-card-pinned">已归档</span>}
         <span className="wk-card-time">{timeLabel(idea.createdAt)}</span>
@@ -172,6 +173,7 @@ export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', h
       {!editing && (
         <div className="wk-card-actions">
           {onRelated && <ActionBtn icon="orbit" label="找相关灵感" onClick={() => onRelated(idea.id)} />}
+          {onDone && <ActionBtn icon="check" label={idea.done ? '取消完稿' : '标记为已完稿'} active={idea.done} onClick={() => onDone(idea.id)} />}
           <ActionBtn icon="pin" label={idea.pinned ? '取消置顶' : '置顶'} active={idea.pinned} onClick={() => onPin(idea.id)} />
           <ActionBtn icon="edit" label="编辑" onClick={() => setEditing(true)} />
           <ActionBtn icon="archive" label={idea.archived ? '取消归档' : '归档'} active={idea.archived} onClick={() => onArchive(idea.id)} />

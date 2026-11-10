@@ -4,6 +4,7 @@
 //     id, kind: 'text' | 'image' | 'link' | 'video',
 //     text,                 // 文字内容 / 备注（非文字类可为空）
 //     tags: string[], pinned, archived, createdAt, updatedAt,
+//     done?, doneAt?,       // 已完稿及完稿时间
 //     url?,                 // 链接 / 视频地址 / 网络图片地址
 //     file?: { name, mime, size, w?, h? },   // 上传到 host 的图片或视频
 //     preview?: { title, description, image, site },  // 链接预览
@@ -172,6 +173,10 @@ function build(raw, { id, now }) {
     updatedAt: 0,
   }
   it.updatedAt = cleanNum(raw.updatedAt) ?? it.createdAt
+  if (raw.done === true) {
+    it.done = true
+    it.doneAt = cleanNum(raw.doneAt) ?? it.updatedAt
+  }
   if (kind !== 'text' && isHttpUrl(raw.url)) it.url = raw.url
   if (kind === 'image' || kind === 'video') {
     const file = cleanFile(raw.file)

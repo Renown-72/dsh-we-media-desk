@@ -11,3 +11,6 @@ if (q.get('mode')) localStorage.setItem('we-media-desk:ideas-mode', JSON.stringi
 if (q.get('tab')) localStorage.setItem('we-media-desk:tab', q.get('tab'))
 
 createRoot(document.getElementById('root')).render(<App />)
+
+// ?capture=1：模拟按 N 打开录入框
+if (q.get('capture') === '1') setTimeout(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n' })), 800)

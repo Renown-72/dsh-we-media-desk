@@ -127,6 +127,14 @@ export function useIdeas({ placeRef } = {}) {
   const togglePin = useCallback(id => update(id, it => ({ pinned: !it.pinned })), [update])
   const toggleArchive = useCallback(id => update(id, it => ({ archived: !it.archived })), [update])
   const move = useCallback((id, pos) => update(id, { pos }, { touch: false }), [update])
+  // 完稿：记下完稿时间；取消时一并清掉
+  const toggleDone = useCallback(id => update(id, it => (it.done ? { done: undefined, doneAt: undefined } : { done: true, doneAt: Date.now() })), [update])
+
+  // 清掉一些灵感在画布上的位置，让它们重新自动摆放
+  const unplace = useCallback(ids => {
+    const set = new Set(ids)
+    setIdeas(prev => prev.map(it => (set.has(it.id) && it.pos ? (({ pos, ...rest }) => rest)(it) : it)))
+  }, [])
 
   // 给还没摆过位置的灵感一次性写入位置（画布自动排版的结果）
   const placeMany = useCallback(positions => {
@@ -135,6 +143,6 @@ export function useIdeas({ placeRef } = {}) {
 
   return {
     ideas, sync, uploads,
-    add, addFromInput, addFiles, dismissUpload, update, remove, togglePin, toggleArchive, move, placeMany,
+    add, addFromInput, addFiles, dismissUpload, update, remove, togglePin, toggleArchive, toggleDone, move, placeMany, unplace,
   }
 }
