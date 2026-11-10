@@ -1,0 +1,5 @@
+# DSH bundle patch：把本插件挂进 profile。
+# 具体 entry 请按 DSH 0.2.x 的插件加载约定填写；这里是骨架。
+- insert:
+    - id: we-media-desk
+      plugin: dsh-we-media-desk
