@@ -1,12 +1,12 @@
 // 自媒体工作台 —— 浏览器半边（前端）。
-// DSH 客户端模块系统会懒加载本文件，宿主提供 React。
+// DSH 客户端模块系统懒加载本文件，宿主提供 React。
+// 通过 ctx.slots 注册到 DSH 的侧栏入口与主面板。
 import React from 'react'
 import styles from './styles.css'
 import { IdeasPanel } from './ideas.jsx'
 
 const { useState } = React
 
-// 五个页面：灵感 · 内容 · 排期 · 复盘 · 风格
 const TABS = [
   { id: 'ideas', label: '灵感' },
   { id: 'contents', label: '内容' },
@@ -43,9 +43,23 @@ export function App() {
   )
 }
 
-export function apply() {
-  // 客户端插件挂载入口占位；具体如何注册页面视图按 DSH 客户端运行时约定接入。
-  return { App }
+// 侧栏图标/入口
+export function SidebarEntry() {
+  return React.createElement('div', { className: 'wk-sidebar-entry' }, '📝 自媒体工作台')
 }
 
-export default { apply, App }
+// DSH 客户端插件约定：inject slots，apply 里注册槽位。
+export const inject = ['slots']
+
+export function apply(ctx) {
+  ctx.slots.inject('sidebar.panellist', () => ctx.slots.register(
+    { name: 'sidebar.panellist', id: 'we-media-desk', order: 6, label: () => '自媒体工作台' },
+    SidebarEntry,
+  ))
+  ctx.slots.inject('main', () => ctx.slots.register(
+    { name: 'main', key: 'we-media-desk' },
+    App,
+  ))
+}
+
+export default { inject, apply }
