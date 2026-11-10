@@ -101,6 +101,16 @@ export function siteName(url) {
   try { return new URL(url).hostname.replace(/^www\./, '') } catch { return '' }
 }
 
+// 从输入里取出 #标签：只认开头或空白后的 #，网址里的 # 不受影响。
+// "周末去 #探店 一家咖啡馆 #咖啡" -> { text: '周末去 一家咖啡馆', tags: ['探店','咖啡'] }
+const HASHTAG_RE = /(^|\s)[#＃]([^\s#＃,，。.!！?？;；:：、()（）【】\[\]]{1,24})/g
+export function splitHashtags(input) {
+  const raw = String(input ?? '')
+  const tags = []
+  const text = raw.replace(HASHTAG_RE, (_m, pre, tag) => { tags.push(tag); return pre })
+  return { text: text.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').trim(), tags: parseTags(tags) }
+}
+
 // ---- 构造与校验 ----
 
 const FILE_NAME_RE = /^[a-z0-9_-]{1,64}\.[a-z0-9]{1,8}$/

@@ -2,13 +2,16 @@
 // 镜头移动带缓动；新灵感落在视野外时镜头会带过去；“相关”时相关卡片聚到中心卡片周围。
 import React from 'react'
 import { IdeaCard } from './IdeaCard.jsx'
+import { Icon } from '../icons.jsx'
 import {
-  cardSize, rectOf, tilt, zoomAt, fitRects, findFreeSpot, rectVisible, centerOn,
+  cardSize, rectOf, tilt, zoomAt, fitRects, findFreeSpot, rectVisible, centerOn, heroRect,
 } from './layout.js'
 
-const { useState, useRef, useEffect, useMemo, useCallback } = React
+const { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } = React
 
 const DRAG_THRESHOLD = 3
+// 在这些元素上按下时不拖卡片、不平移画布
+const INTERACTIVE = 'a, button, video, textarea, input, label, .wk-editor'
 
 function prefersReducedMotion() {
   try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
@@ -73,13 +76,20 @@ function useCameraMotion(view, setView) {
   return { viewRef, animateTo, glide, stop }
 }
 
-const CanvasItem = React.memo(function CanvasItem({ idea, x, y, w, z, angle, dragging, dim, isNew, cardProps, onStartDrag }) {
-  const handleProps = useMemo(
-    () => ({ onPointerDown: e => onStartDrag(e, idea.id), title: '拖动这里移动卡片' }),
-    [onStartDrag, idea.id],
-  )
+const CanvasItem = React.memo(function CanvasItem({ idea, x, y, w, z, angle, dragging, dim, isNew, cardProps, onStartDrag, observer }) {
+  const handleProps = useMemo(() => ({ onPointerDown: e => onStartDrag(e, idea.id) }), [onStartDrag, idea.id])
+  const ref = useRef(null)
+  // 量实际尺寸，供排版避免重叠
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !observer) return
+    observer.observe(el)
+    return () => observer.unobserve(el)
+  }, [observer])
   return (
     <div
+      ref={ref}
+      data-id={idea.id}
       className={'wk-canvas-item' + (dragging ? ' is-dragging' : '') + (dim ? ' is-dim' : '') + (isNew ? ' is-new' : '')}
       style={{ left: x, top: y, width: w, zIndex: dragging ? 9999 : z }}
     >
@@ -91,9 +101,22 @@ const CanvasItem = React.memo(function CanvasItem({ idea, x, y, w, z, angle, dra
 })
 
 export function CanvasView({
-  items, positions, view, setView, viewportRef, cardProps, onMove, emptyText,
-  related, onCloseRelated, highlight,
+  items, positions, view, setView, viewportRef, cardProps, onMove,
+  related, onCloseRelated, highlight, heroPos, hero, homeTick, sizes, onMeasure,
 }) {
+  // 一个 ResizeObserver 观察所有卡片，尺寸变化批量回报
+  const onMeasureRef = useRef(onMeasure)
+  onMeasureRef.current = onMeasure
+  const [observer] = useState(() => (typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(entries => {
+    const batch = {}
+    for (const e of entries) {
+      const id = e.target.dataset.id
+      if (id) batch[id] = { w: e.target.offsetWidth, h: e.target.offsetHeight }
+    }
+    onMeasureRef.current?.(batch)
+  })))
+  useEffect(() => () => observer?.disconnect(), [observer])
+
   const { viewRef, animateTo, glide, stop } = useCameraMotion(view, setView)
   const [drag, setDrag] = useState(null)     // { id, x, y } 正在拖动的卡片
   const dragRef = useRef(null)
@@ -109,14 +132,14 @@ export function CanvasView({
     if (!related) return null
     const anchor = byId.get(related.anchorId)
     if (!anchor) return null
-    const aRect = rectOf(anchor, basePos(anchor))
+    const aRect = rectOf(anchor, basePos(anchor), sizes)
     const center = { x: aRect.x + aRect.w / 2, y: aRect.y + aRect.h / 2 }
     const obstacles = [aRect]
     const out = {}
     for (const id of related.ids) {
       const it = byId.get(id)
       if (!it) continue
-      const size = cardSize(it)
+      const size = cardSize(it, sizes)
       const p = findFreeSpot(size, center, obstacles, { gap: 28, step: 40 })
       out[id] = p
       obstacles.push({ ...p, ...size })
@@ -149,11 +172,20 @@ export function CanvasView({
     const el = viewportRef.current
     const it = highlight && byId.get(highlight)
     if (!it || !el || related) return
-    const rect = rectOf(it, posOfRef.current(it))
+    const rect = rectOf(it, posOfRef.current(it), sizes)
     if (!rectVisible(viewRef.current, rect, el.clientWidth, el.clientHeight)) {
       animateTo(centerOn(viewRef.current, rect, el.clientWidth, el.clientHeight))
     }
   }, [highlight]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 回到首屏（点 + 号时）：镜头移到首屏，缩放回 100%
+  const goHome = useCallback(() => {
+    const el = viewportRef.current
+    if (!el || !heroPos) return
+    const r = heroRect(heroPos)
+    animateTo(centerOn({ ...viewRef.current, zoom: 1 }, r, el.clientWidth, el.clientHeight))
+  }, [heroPos, animateTo, viewportRef, viewRef])
+  useEffect(() => { if (homeTick) goHome() }, [homeTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 滚轮需要非 passive 监听才能阻止页面滚动
   useEffect(() => {
@@ -175,7 +207,7 @@ export function CanvasView({
   }, [viewportRef, setView, stop])
 
   function startPan(e) {
-    if (e.button !== 0 || e.target.closest('.wk-canvas-item, .wk-canvas-tools, .wk-related-bar')) return
+    if (e.button !== 0 || e.target.closest('.wk-canvas-item, .wk-float, ' + INTERACTIVE)) return
     stop()
     const v = viewRef.current
     gesture.current = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: v.x, vy: v.y, moved: false, samples: [{ t: performance.now(), x: e.clientX, y: e.clientY }] }
@@ -184,7 +216,7 @@ export function CanvasView({
   }
 
   const startCardDrag = useCallback((e, id) => {
-    if (e.button !== 0) return
+    if (e.button !== 0 || e.target.closest(INTERACTIVE)) return
     e.stopPropagation()
     e.preventDefault()
     stop()
@@ -250,7 +282,9 @@ export function CanvasView({
 
   function fit() {
     const el = viewportRef.current
-    animateTo(fitRects(items.map(it => rectOf(it, posOf(it))), el.clientWidth, el.clientHeight))
+    const rects = items.map(it => rectOf(it, posOf(it), sizes))
+    if (heroPos) rects.push(heroRect(heroPos))
+    animateTo(fitRects(rects, el.clientWidth, el.clientHeight))
   }
 
   const relatedSet = useMemo(() => new Set(related ? [related.anchorId, ...related.ids] : []), [related])
@@ -266,6 +300,11 @@ export function CanvasView({
       onPointerCancel={endGesture}
     >
       <div className="wk-canvas-world" style={{ transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.zoom})` }}>
+        {heroPos && (
+          <div className={'wk-hero-slot' + (related ? ' is-dim' : '')} style={{ left: heroPos.x, top: heroPos.y, width: heroRect(heroPos).w, height: heroRect(heroPos).h }}>
+            {hero}
+          </div>
+        )}
         {items.map(it => {
           const p = posOf(it)
           const inRelated = relatedSet.has(it.id)
@@ -275,7 +314,7 @@ export function CanvasView({
               idea={it}
               x={p.x}
               y={p.y}
-              w={cardSize(it).w}
+              w={cardSize(it, sizes).w}
               z={related && inRelated ? 5000 : front.indexOf(it.id) + 1}
               angle={related && inRelated ? 0 : tilt(it)}
               dragging={drag?.id === it.id}
@@ -283,32 +322,33 @@ export function CanvasView({
               isNew={highlight === it.id}
               cardProps={cardProps}
               onStartDrag={startCardDrag}
+              observer={observer}
             />
           )
         })}
       </div>
 
-      {items.length === 0 && <div className="wk-canvas-empty">{emptyText}</div>}
-
       {related && (
-        <div className="wk-related-bar" onPointerDown={e => e.stopPropagation()}>
+        <div className="wk-float wk-related-bar">
+          <Icon name="orbit" size={15} />
           {related.ids.length
-            ? <>找到 {related.ids.length} 条和「{related.label}」相关的灵感</>
-            : <>没有找到和「{related.label}」相关的灵感</>}
-          <button className="wk-mini" onClick={onCloseRelated}>收起（Esc）</button>
+            ? <span>找到 <b>{related.ids.length}</b> 条和「{related.label}」相关的灵感</span>
+            : <span>没有找到和「{related.label}」相关的灵感</span>}
+          <button className="wk-btn-text" onClick={onCloseRelated}>收起 <kbd>Esc</kbd></button>
         </div>
       )}
 
-      <div className="wk-canvas-tools" onPointerDown={e => e.stopPropagation()}>
-        <button className="wk-mini" onClick={() => zoomBy(1 / 1.25)} title="缩小">−</button>
-        <button className="wk-mini wk-zoom" title="恢复 100%"
+      <div className="wk-float wk-zoombar">
+        <button className="wk-icon-btn" onClick={() => zoomBy(1 / 1.25)} title="缩小"><Icon name="minus" size={16} /></button>
+        <button className="wk-zoom-val" title="恢复 100%"
           onClick={() => { const el = viewportRef.current; animateTo(zoomAt(viewRef.current, 1, el.clientWidth / 2, el.clientHeight / 2)) }}>
           {Math.round(view.zoom * 100)}%
         </button>
-        <button className="wk-mini" onClick={() => zoomBy(1.25)} title="放大">＋</button>
-        <button className="wk-mini" onClick={fit} title="显示全部卡片">适应窗口</button>
+        <button className="wk-icon-btn" onClick={() => zoomBy(1.25)} title="放大"><Icon name="plus" size={16} /></button>
+        <span className="wk-sep" />
+        <button className="wk-icon-btn" onClick={goHome} title="回到首屏"><Icon name="target" size={16} /></button>
+        <button className="wk-icon-btn" onClick={fit} title="显示全部"><Icon name="fit" size={16} /></button>
       </div>
-      <div className="wk-canvas-hint">拖卡片顶部移动 · 拖空白处或滚轮平移 · Ctrl+滚轮缩放</div>
     </div>
   )
 }

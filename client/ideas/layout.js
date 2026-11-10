@@ -25,35 +25,56 @@ export function tilt(it) {
   return ((hash(it.id + '#t') % 33) - 16) / 10
 }
 
-// 粗略估算卡片高度（只用于排版，不必精确）
-export function estimateHeight(it, w = cardWidth(it)) {
-  const inner = w - 28
-  let h = 50 // 头部 + 内边距
-  const kind = it.kind || 'text'
-  if (kind === 'image') {
-    const fw = it.file?.w, fh = it.file?.h
-    h += fw && fh ? Math.min(Math.round(inner * fh / fw), 480) : Math.round(inner * 0.75)
-  } else if (kind === 'video') {
-    h += it.file || !it.preview?.image ? Math.round(inner * 9 / 16) + (it.file ? 0 : 60) : Math.round(inner * 9 / 16) + 70
-  } else if (kind === 'link') {
-    h += it.preview?.image ? Math.round(inner * 9 / 16) + 76 : 76
+// 估算卡片高度（实际排版以画布上量到的尺寸为准，估算只在还没量到时使用）
+const CJK = /[\u3000-\u9fff\uff00-\uffef]/g
+function textLines(text, width, fontPx) {
+  let lines = 0
+  for (const line of String(text).split('\n')) {
+    const cjk = (line.match(CJK) || []).length
+    const units = cjk + (line.length - cjk) * 0.55 // 西文字符约半个汉字宽
+    lines += Math.max(1, Math.ceil((units * fontPx) / width))
   }
-  if (it.text) {
-    const perLine = Math.max(8, Math.floor(inner / 14))
-    const lines = it.text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / perLine)), 0)
-    h += 22 * Math.min(14, lines) + 8
-  }
-  if (it.tags?.length) h += 30
-  return h
+  return lines
 }
 
-export function cardSize(it) {
+export function estimateHeight(it, w = cardWidth(it)) {
+  const inner = w - 30 // 左右内边距 + 边框
+  const kind = it.kind || 'text'
+  const p = it.preview || {}
+  let h = 2 + 38 // 边框 + 底部信息栏
+  let body = 0
+  const add = px => { body += body ? px + 8 : px }
+  if (kind === 'image') {
+    const fw = it.file?.w, fh = it.file?.h
+    h += fw && fh ? Math.min(Math.round(w * fh / fw), 520) : Math.round(w * 0.75)
+  } else if (kind === 'video' && (it.file || /\.(mp4|webm|mov|m4v|ogv)$/i.test(it.url || ''))) {
+    h += Math.round(w * 9 / 16)
+  } else if (kind === 'link' || kind === 'video') {
+    if (p.image) h += Math.round(w * 9 / 16)
+    let link = Math.min(2, textLines(p.title || it.url || '', inner, 14)) * 20
+    if (p.description) link += 5 + Math.min(2, textLines(p.description, inner, 12.5)) * 19
+    link += 5 + 18
+    add(link)
+  }
+  if (it.text) {
+    const main = kind === 'text'
+    add(Math.min(16, textLines(it.text, inner, main ? 15 : 13.5)) * (main ? 25.5 : 22.3))
+  }
+  if (it.tags?.length) add(Math.ceil(it.tags.length / 4) * 24)
+  if (body) h += 12 + body
+  return Math.round(h)
+}
+
+// sizes：画布上量到的实际尺寸 { [id]: {w, h} }，有就用
+export function cardSize(it, sizes) {
+  const m = sizes?.[it.id]
+  if (m) return m
   const w = cardWidth(it)
   return { w, h: estimateHeight(it, w) }
 }
 
-export function rectOf(it, pos) {
-  const { w, h } = cardSize(it)
+export function rectOf(it, pos, sizes) {
+  const { w, h } = cardSize(it, sizes)
   return { x: pos.x, y: pos.y, w, h }
 }
 
@@ -117,18 +138,32 @@ function centerOf(rects) {
   return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
 }
 
+// 首屏（日期、统计、输入框）在画布上占的位置
+export const HERO_SIZE = { w: 600, h: 340 }
+
+// 首屏放在原点附近的空位（已有卡片不动）
+export function placeHero(ideas, sizes) {
+  const placed = ideas.filter(it => it.pos).map(it => rectOf(it, it.pos, sizes))
+  return findFreeSpot(HERO_SIZE, { x: 0, y: 0 }, placed, { gap: 40 })
+}
+
+export function heroRect(pos) {
+  return { x: pos.x, y: pos.y, ...HERO_SIZE }
+}
+
 // 返回 { [id]: {x, y} }：已有位置的不动；没位置的按从新到旧，
-// 依次放到离已有内容中心最近的空位上（越新越靠中间）。
-export function autoPlace(ideas) {
+// 依次放到离锚点最近的空位上（越新越靠中间）。
+// 默认锚点是已有内容的中心；hero 给出时围着首屏摆，并避开首屏。
+export function autoPlace(ideas, { hero, sizes } = {}) {
   const todo = ideas.filter(it => !it.pos).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
   if (!todo.length) return {}
-  const placed = ideas.filter(it => it.pos).map(it => rectOf(it, it.pos))
-  const anchor = centerOf(placed)
-  const index = new RectIndex(placed)
+  const placed = ideas.filter(it => it.pos).map(it => rectOf(it, it.pos, sizes))
+  const anchor = hero ? { x: hero.x + hero.w / 2, y: hero.y + hero.h / 2 } : centerOf(placed)
+  const index = new RectIndex(hero ? [...placed, { ...hero, x: hero.x - 20, y: hero.y - 20, w: hero.w + 40, h: hero.h + 40 }] : placed)
   const out = {}
   let lastK = 0
   for (const it of todo) {
-    const size = cardSize(it)
+    const size = cardSize(it, sizes)
     // 往回退一些再找，小卡片仍能填进中心附近的缝隙
     const pos = findFreeSpot(size, anchor, index, { from: Math.floor(lastK * 0.7), onFound: k => { lastK = k } })
     out[it.id] = pos

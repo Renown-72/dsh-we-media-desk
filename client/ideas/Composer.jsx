@@ -1,8 +1,9 @@
-// 录入区：文字 / 网址 / 分享文案，粘贴或选择图片、视频文件。
+// 录入框：一句话、网址或分享文案；#标签 直接写在文字里；可粘贴或选择图片、视频。
 import React from 'react'
-import { extractUrl, classifyUrl, KINDS } from '../../src/ideas.js'
+import { extractUrl, classifyUrl, splitHashtags, KINDS } from '../../src/ideas.js'
+import { Icon } from '../icons.jsx'
 
-const { useState, useRef } = React
+const { useState, useRef, useLayoutEffect, useImperativeHandle, forwardRef } = React
 
 const KIND_LABEL = Object.fromEntries(KINDS.map(k => [k.id, k.label]))
 
@@ -10,22 +11,31 @@ export function mediaFilesOf(dataTransfer) {
   return [...(dataTransfer?.files || [])].filter(f => /^(image|video)\//.test(f.type))
 }
 
-export function Composer({ onText, onFiles, uploads, onDismissUpload }) {
+export const Composer = forwardRef(function Composer({ onText, onFiles }, ref) {
   const [draft, setDraft] = useState('')
-  const [tags, setTags] = useState('')
   const [error, setError] = useState('')
+  const areaRef = useRef(null)
   const fileRef = useRef(null)
 
-  const { url } = extractUrl(draft)
-  const detected = url ? classifyUrl(url) : ''
+  useImperativeHandle(ref, () => ({ focus: () => areaRef.current?.focus({ preventScroll: true }) }), [])
+
+  // 自动长高，最多 6 行
+  useLayoutEffect(() => {
+    const el = areaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 6 * 24 + 4) + 'px'
+  }, [draft])
+
+  const { text, tags } = splitHashtags(draft)
+  const { url } = extractUrl(text)
+  const detected = url ? classifyUrl(url) : text ? 'text' : ''
 
   function submit() {
-    const text = draft.trim()
-    if (!text) return
+    if (!text && !tags.length) return
     try {
       onText(text, tags)
       setDraft('')
-      setTags('')
       setError('')
     } catch (err) {
       setError(err.message)
@@ -38,59 +48,51 @@ export function Composer({ onText, onFiles, uploads, onDismissUpload }) {
     if (!files.length) return
     e.preventDefault()
     e.stopPropagation()
-    onFiles(files, { tags, text: draft.trim() })
+    onFiles(files, { tags, text })
     setDraft('')
   }
 
   function onPick(e) {
     const files = [...e.target.files]
     e.target.value = ''
-    if (files.length) onFiles(files, { tags, text: draft.trim() }).then(() => setDraft(''))
+    if (files.length) { onFiles(files, { tags, text }); setDraft('') }
   }
 
   return (
     <div className="wk-composer">
-      <div className="wk-compose">
+      <div className={'wk-compose-pill' + (draft ? ' has-text' : '')}>
+        <Icon name="sparkle" size={17} className="wk-compose-icon" />
         <textarea
-          className="wk-input wk-textarea"
+          ref={areaRef}
+          className="wk-compose-input"
           value={draft}
-          rows={draft.includes('\n') ? 3 : 1}
-          placeholder="记一句灵感，或粘贴链接 / 分享文案 / 图片…（Enter 保存，Shift+Enter 换行）"
-          onChange={e => setDraft(e.target.value)}
+          rows={1}
+          placeholder="记下一个灵感，或贴一个链接…"
+          onChange={e => { setDraft(e.target.value); if (error) setError('') }}
           onPaste={onPaste}
           onKeyDown={e => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit() }
           }}
         />
-        <input
-          className="wk-input wk-input-tags"
-          value={tags}
-          placeholder="#标签（可选）"
-          onChange={e => setTags(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
-        />
-        <button className="wk-btn wk-btn-ghost" title="添加图片或视频文件" onClick={() => fileRef.current?.click()}>图片/视频</button>
-        <button className="wk-btn" onClick={submit}>记下</button>
+        <button className="wk-icon-btn" title="添加图片或视频" onClick={() => fileRef.current?.click()}>
+          <Icon name="attach" size={17} />
+        </button>
+        <button className="wk-send" title="记下（Enter）" disabled={!text && !tags.length} onClick={submit}>
+          <Icon name="arrowUp" size={16} stroke={2.2} />
+        </button>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={onPick} />
       </div>
       <div className="wk-compose-hint">
-        {detected
-          ? <span className="wk-detected">将保存为「{KIND_LABEL[detected]}」{draft.trim() !== url ? '，其余文字作为备注' : ''}</span>
-          : '也可以直接把图片、视频文件拖进来，或在页面空白处 Ctrl+V 粘贴'}
-        {error && <span className="wk-error">{error}</span>}
+        {error ? <span className="wk-error">{error}</span> : draft ? (
+          <>
+            {detected && <span className="wk-hint-kind">存为{KIND_LABEL[detected]}</span>}
+            {tags.map(t => <span key={t} className="wk-hint-tag">#{t}</span>)}
+            <span className="wk-hint-keys">Enter 记下 · Shift+Enter 换行</span>
+          </>
+        ) : (
+          <span>用 #标签 归类 · 图片、视频可以直接粘贴或拖进来</span>
+        )}
       </div>
-      {uploads.length > 0 && (
-        <div className="wk-uploads">
-          {uploads.map(u => (
-            <div key={u.id} className={'wk-upload' + (u.error ? ' is-error' : '')}>
-              <span className="wk-upload-name">{u.name}</span>
-              {u.error
-                ? <><span>{u.error}</span><button className="wk-mini" onClick={() => onDismissUpload(u.id)}>✕</button></>
-                : <span className="wk-upload-bar"><span style={{ width: `${Math.round(u.progress * 100)}%` }} /></span>}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
-}
+})

@@ -4,40 +4,56 @@
 import React from 'react'
 import styles from './styles.css'
 import { IdeasPanel } from './ideas/index.jsx'
+import { Icon } from './icons.jsx'
 
 const { useState } = React
 
 const TABS = [
-  { id: 'ideas', label: '灵感' },
-  { id: 'contents', label: '内容' },
-  { id: 'schedule', label: '排期' },
-  { id: 'review', label: '复盘' },
-  { id: 'style', label: '风格' },
+  { id: 'ideas', label: '灵感', icon: 'lightbulb' },
+  { id: 'contents', label: '内容', icon: 'docs', soon: '把灵感变成脚本、标题和封面，草稿到发布一目了然。' },
+  { id: 'schedule', label: '排期', icon: 'calendar', soon: '把做好的内容拖到日历上，哪天发什么清清楚楚。' },
+  { id: 'review', label: '复盘', icon: 'chart', soon: '记下每条内容的数据，看看什么最受欢迎。' },
+  { id: 'style', label: '风格', icon: 'palette', soon: '沉淀你的写作风格，让成稿更像你。' },
 ]
 
-function Placeholder({ name }) {
-  return <div className="wk-panel"><p className="wk-empty">{name}页面（待开发）</p></div>
+function ComingSoon({ tab }) {
+  return (
+    <div className="wk-soon">
+      <div className="wk-soon-card">
+        <span className="wk-soon-icon"><Icon name={tab.icon} size={26} /></span>
+        <h2>{tab.label}</h2>
+        <p>{tab.soon}</p>
+        <span className="wk-soon-tag">正在制作</span>
+      </div>
+    </div>
+  )
 }
 
 export function App() {
-  const [tab, setTab] = useState('ideas')
+  const [tab, setTab] = useState(() => {
+    try { return localStorage.getItem('we-media-desk:tab') || 'ideas' } catch { return 'ideas' }
+  })
+  const current = TABS.find(t => t.id === tab) || TABS[0]
+  function pick(id) {
+    setTab(id)
+    try { localStorage.setItem('we-media-desk:tab', id) } catch { /* ignore */ }
+  }
   return (
     <div className="wk-root">
       <style>{styles}</style>
-      <header className="wk-header">
-        <h1 className="wk-title">自媒体工作台</h1>
-        <nav className="wk-tabs">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              className={'wk-tab' + (tab === t.id ? ' is-active' : '')}
-              onClick={() => setTab(t.id)}
-            >{t.label}</button>
-          ))}
-        </nav>
-      </header>
+      <nav className="wk-float wk-nav" aria-label="自媒体工作台">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            className={'wk-nav-tab' + (current.id === t.id ? ' is-active' : '')}
+            onClick={() => pick(t.id)}
+          >
+            <Icon name={t.icon} size={15} />{t.label}
+          </button>
+        ))}
+      </nav>
       <main className="wk-main">
-        {tab === 'ideas' ? <IdeasPanel /> : <Placeholder name={TABS.find(t => t.id === tab).label} />}
+        {current.id === 'ideas' ? <IdeasPanel /> : <ComingSoon tab={current} />}
       </main>
     </div>
   )
