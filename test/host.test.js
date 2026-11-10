@@ -79,3 +79,55 @@ test('apply 向 webServer 注册 /we-media-desk 前缀路由', () => {
   assert.equal(registered[0].kind, 'prefix')
   assert.equal(registered[0].path, '/we-media-desk')
 })
+
+const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex')
+
+test('files 上传、读取（含 Range）、删除', () => withServer(async base => {
+  const up = await fetch(base + '/files', { method: 'POST', headers: { 'content-type': 'image/png' }, body: PNG })
+  const { ok, file } = await up.json()
+  assert.equal(ok, true)
+  assert.match(file.name, /^f_[a-z0-9]+\.png$/)
+  assert.equal(file.size, PNG.length)
+
+  const got = await fetch(`${base}/files/${file.name}`)
+  assert.equal(got.status, 200)
+  assert.equal(got.headers.get('content-type'), 'image/png')
+  assert.equal(got.headers.get('x-content-type-options'), 'nosniff')
+  assert.deepEqual(Buffer.from(await got.arrayBuffer()), PNG)
+
+  const part = await fetch(`${base}/files/${file.name}`, { headers: { range: 'bytes=2-5' } })
+  assert.equal(part.status, 206)
+  assert.equal(part.headers.get('content-range'), `bytes 2-5/${PNG.length}`)
+  assert.deepEqual(Buffer.from(await part.arrayBuffer()), PNG.subarray(2, 6))
+  assert.equal((await fetch(`${base}/files/${file.name}`, { headers: { range: 'bytes=999-' } })).status, 416)
+
+  assert.equal((await fetch(`${base}/files/${file.name}`, { method: 'DELETE' })).status, 200)
+  assert.equal((await fetch(`${base}/files/${file.name}`)).status, 404)
+}))
+
+test('files 拒绝 SVG、空文件、非法文件名', () => withServer(async base => {
+  const svg = await fetch(base + '/files', { method: 'POST', headers: { 'content-type': 'image/svg+xml' }, body: '<svg/>' })
+  assert.equal(svg.status, 415)
+  const empty = await fetch(base + '/files', { method: 'POST', headers: { 'content-type': 'image/png' }, body: '' })
+  assert.equal(empty.status, 400)
+  assert.equal((await fetch(base + '/files/..%2Fstate.json')).status, 400)
+  assert.equal((await fetch(base + '/files/f_abcdefgh.exe')).status, 400)
+}))
+
+test('preview 接口把 url 交给预览函数', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wk-host-'))
+  const seen = []
+  const server = createServer(createHandler({
+    ctx: {}, store: new Store(dir),
+    preview: async u => { seen.push(u); return { title: 'T', description: '', image: '', site: 's' } },
+  }))
+  await new Promise(r => server.listen(0, '127.0.0.1', r))
+  try {
+    const res = await fetch(`http://127.0.0.1:${server.address().port}/we-media-desk/preview?url=${encodeURIComponent('https://x.com/a?b=1')}`)
+    assert.deepEqual(await res.json(), { ok: true, preview: { title: 'T', description: '', image: '', site: 's' } })
+    assert.deepEqual(seen, ['https://x.com/a?b=1'])
+  } finally {
+    await new Promise(r => server.close(r))
+    await rm(dir, { recursive: true, force: true })
+  }
+})

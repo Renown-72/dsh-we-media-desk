@@ -70,3 +70,53 @@ export const hostBridge = {
     return run
   },
 }
+
+// ---- 附件与链接预览 ----
+
+const API = '/we-media-desk'
+
+export function fileUrl(name) {
+  return `${API}/files/${encodeURIComponent(name)}`
+}
+
+// 上传图片 / 视频；用 XHR 以便拿到上传进度。返回 { name, mime, size }。
+export function uploadFile(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API}/files`)
+    xhr.withCredentials = true
+    xhr.setRequestHeader('content-type', file.type || 'application/octet-stream')
+    xhr.setRequestHeader('accept', 'application/json')
+    xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total) }
+    xhr.onerror = () => reject(new Error('上传失败：连不上 DSH 后台'))
+    xhr.onload = () => {
+      let body = null
+      try { body = JSON.parse(xhr.responseText) } catch { /* ignore */ }
+      if (xhr.status >= 200 && xhr.status < 300 && body?.ok) resolve(body.file)
+      else reject(new Error(body?.error || `上传失败（HTTP ${xhr.status}）`))
+    }
+    xhr.send(file)
+  })
+}
+
+export async function deleteFile(name) {
+  try {
+    await request(fileUrl(name), { method: 'DELETE' })
+  } catch { /* 删不掉只是留下孤立文件，不影响使用 */ }
+}
+
+export async function fetchLinkPreview(url) {
+  const body = await request(`${API}/preview?url=${encodeURIComponent(url)}`)
+  return body.preview
+}
+
+// 读取图片尺寸（画布排版用），失败返回 null。
+export function imageSize(file) {
+  return new Promise(resolve => {
+    const src = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => { resolve({ w: img.naturalWidth, h: img.naturalHeight }); URL.revokeObjectURL(src) }
+    img.onerror = () => { resolve(null); URL.revokeObjectURL(src) }
+    img.src = src
+  })
+}

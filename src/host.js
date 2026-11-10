@@ -5,8 +5,14 @@
 //   GET  /we-media-desk/health  -> { ok, plugin }
 //   GET  /we-media-desk/ideas   -> { ok, ideas }
 //   PUT  /we-media-desk/ideas   <- { ideas: [...] }  整体替换，返回 { ok, count }
+//   POST /we-media-desk/files   <- 文件原始内容（content-type 为文件类型）返回 { ok, file }
+//   GET  /we-media-desk/files/<name>   读取附件（支持 Range）
+//   DELETE /we-media-desk/files/<name> 删除附件
+//   GET  /we-media-desk/preview?url=   链接预览 { ok, preview }
 import { Store, DATA_DIR_NAME, defaultDataDir } from './store.js'
 import { normalizeIdeas } from './ideas.js'
+import { FileStore } from './files.js'
+import { fetchPreview } from './preview.js'
 
 export const name = 'dsh-we-media-desk'
 export const ROUTE_PREFIX = '/we-media-desk'
@@ -83,7 +89,7 @@ export function resolveDataDir(ctx) {
 }
 
 // 生成 HTTP 处理函数；独立导出便于单测。
-export function createHandler({ ctx, store }) {
+export function createHandler({ ctx, store, files = new FileStore(store.dir), preview = fetchPreview }) {
   async function route(req, res) {
     const url = new URL(req.url ?? '/', 'http://localhost')
     const path = url.pathname.slice(ROUTE_PREFIX.length) || '/'
@@ -107,6 +113,27 @@ export function createHandler({ ctx, store }) {
         return json(res, 200, { ok: true, count: ideas.length })
       }
       throw httpError(405, 'method not allowed')
+    }
+
+    if (path === '/files') {
+      if (method !== 'POST') throw httpError(405, 'method not allowed')
+      const file = await files.save(req, req.headers['content-type'])
+      return json(res, 200, { ok: true, file })
+    }
+
+    if (path.startsWith('/files/')) {
+      const fileName = decodeURIComponent(path.slice('/files/'.length))
+      if (method === 'GET' || method === 'HEAD') return files.send(req, res, fileName)
+      if (method === 'DELETE') {
+        await files.remove(fileName)
+        return json(res, 200, { ok: true })
+      }
+      throw httpError(405, 'method not allowed')
+    }
+
+    if (path === '/preview') {
+      if (method !== 'GET') throw httpError(405, 'method not allowed')
+      return json(res, 200, { ok: true, preview: await preview(url.searchParams.get('url') || '') })
     }
 
     throw httpError(404, 'not found')

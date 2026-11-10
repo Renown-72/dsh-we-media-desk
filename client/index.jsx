@@ -3,7 +3,7 @@
 // 通过 ctx.slots 注册到 DSH 的侧栏入口与主面板。
 import React from 'react'
 import styles from './styles.css'
-import { IdeasPanel } from './ideas.jsx'
+import { IdeasPanel } from './ideas/index.jsx'
 
 const { useState } = React
 

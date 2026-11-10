@@ -41,9 +41,7 @@
 .wk-card:hover { box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .wk-card.is-pinned { border-color: #f5d97a; background: #fffdf5; }
 .wk-card.is-archived { opacity: .55; }
-.wk-card-head { display: flex; align-items: flex-start; gap: 8px; }
 .wk-pin { font-size: 12px; line-height: 1.6; }
-.wk-card-text { flex: 1; line-height: 1.5; word-break: break-word; }
 .wk-card-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .15s; flex-shrink: 0; }
 .wk-card:hover .wk-card-actions { opacity: 1; }
 .wk-mini {
@@ -74,3 +72,96 @@
 .wk-empty { color: #9ca3af; font-size: 14px; text-align: center; padding: 24px; }
 .wk-sync { font-size: 12px; margin: -8px 0 12px; color: #9ca3af; }
 .wk-sync.is-local { color: #b45309; }
+
+/* ===== 灵感页 ===== */
+.wk-ideas { max-width: 760px; }
+.wk-ideas.is-canvas { max-width: none; height: 100%; display: flex; flex-direction: column; }
+.wk-ideas.is-dropping { outline: 2px dashed #60a5fa; outline-offset: 6px; border-radius: 12px; }
+
+.wk-composer { margin-bottom: 12px; }
+.wk-compose { margin-bottom: 6px; align-items: flex-start; }
+.wk-textarea { resize: vertical; min-height: 40px; font-family: inherit; line-height: 1.5; box-sizing: border-box; }
+.wk-compose .wk-textarea { flex: 1 1 320px; }
+.wk-btn-ghost { background: #f3f4f6; color: #374151; }
+.wk-btn-ghost:hover { background: #e5e7eb; }
+.wk-compose-hint { font-size: 12px; color: #9ca3af; display: flex; gap: 12px; padding-left: 2px; }
+.wk-detected { color: #2563eb; }
+.wk-error { color: #b91c1c; }
+.wk-uploads { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.wk-upload { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #57606a; }
+.wk-upload.is-error { color: #b91c1c; }
+.wk-upload-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-upload-bar { flex: 0 0 160px; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; }
+.wk-upload-bar > span { display: block; height: 100%; background: #2563eb; transition: width .2s; }
+
+.wk-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.wk-toolbar .wk-input-search { flex: 1 1 180px; min-width: 160px; }
+.wk-seg { display: inline-flex; background: #f3f4f6; border-radius: 8px; padding: 2px; }
+.wk-seg-btn { border: none; background: transparent; padding: 5px 12px; border-radius: 6px; font-size: 13px; color: #57606a; cursor: pointer; }
+.wk-seg-btn.is-active { background: #fff; color: #111827; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.wk-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+.wk-check { font-size: 12px; color: #57606a; display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+.wk-chip-clear { color: #b45309; border-style: dashed; }
+
+/* 卡片 */
+.wk-card { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.wk-card-head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.wk-kind { font-size: 12px; color: #6b7280; }
+.wk-time { font-size: 12px; color: #9ca3af; }
+.wk-card-actions { margin-left: auto; }
+.wk-card-text { line-height: 1.55; word-break: break-word; white-space: pre-wrap; color: #374151; }
+.wk-card-text.is-main { font-size: 15px; color: #1f2328; }
+.wk-card-tags { margin-top: 0; }
+button.wk-tag { border: none; cursor: pointer; }
+.wk-mini-primary { background: #111827; color: #fff; }
+.wk-mini-primary:hover { background: #374151; color: #fff; }
+
+.wk-media { border-radius: 8px; overflow: hidden; background: #f3f4f6; }
+.wk-media img, .wk-media video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.wk-media img { cursor: zoom-in; }
+.wk-media video { object-fit: contain; background: #000; max-height: 420px; }
+.wk-card-feed .wk-media { max-height: 420px; }
+.wk-card-feed .wk-media img { max-height: 420px; object-fit: contain; }
+
+.wk-linkcard { display: flex; flex-direction: column; text-decoration: none; color: inherit; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; background: #fff; }
+.wk-linkcard:hover { border-color: #d1d5db; }
+.wk-card-feed .wk-linkcard { flex-direction: row; }
+.wk-linkcard-cover { position: relative; background: #f3f4f6; aspect-ratio: 16 / 9; flex-shrink: 0; }
+.wk-card-feed .wk-linkcard-cover { width: 200px; }
+.wk-linkcard-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wk-play { position: absolute; inset: 0; margin: auto; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.wk-linkcard-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wk-linkcard-title { font-size: 14px; font-weight: 500; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; }
+.wk-linkcard-desc { font-size: 12px; color: #6b7280; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.wk-linkcard-site { font-size: 12px; color: #9ca3af; }
+
+.wk-editor { display: flex; flex-direction: column; gap: 6px; }
+.wk-editor-actions { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* 信息流 */
+.wk-feed { display: flex; flex-direction: column; gap: 20px; padding-bottom: 40px; }
+.wk-feed-group { display: flex; flex-direction: column; gap: 10px; }
+.wk-feed-day { font-size: 13px; font-weight: 600; color: #6b7280; margin: 0; position: sticky; top: -20px; background: #fff; padding: 6px 0; z-index: 1; }
+.wk-feed-count { font-weight: 400; color: #9ca3af; margin-left: 6px; }
+
+/* 画布 */
+.wk-canvas {
+  position: relative; flex: 1; min-height: 420px; overflow: hidden; border: 1px solid #e5e7eb; border-radius: 12px;
+  background-color: #fafafa; background-image: radial-gradient(#d4d4d8 1px, transparent 1px);
+  cursor: grab; touch-action: none; user-select: none;
+}
+.wk-canvas.is-panning { cursor: grabbing; }
+.wk-canvas-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.wk-canvas-item { position: absolute; }
+.wk-card-canvas { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); cursor: default; user-select: text; }
+.wk-card-canvas .wk-card-head { cursor: move; }
+.wk-card-canvas .wk-card-actions { position: absolute; top: 6px; right: 6px; background: #fff; padding: 2px; border-radius: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 200px; }
+.wk-card-canvas .wk-media { max-height: 480px; }
+.wk-canvas-item.is-dragging .wk-card { box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.wk-canvas-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 14px; pointer-events: none; }
+.wk-canvas-tools { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; background: #fff; padding: 4px; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,.12); cursor: default; }
+.wk-zoom { min-width: 52px; }
+.wk-canvas-hint { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: #a1a1aa; pointer-events: none; }
+
+.wk-lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; z-index: 10000; cursor: zoom-out; }
+.wk-lightbox img { max-width: 92vw; max-height: 92vh; object-fit: contain; }
