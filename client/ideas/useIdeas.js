@@ -10,7 +10,8 @@ const { useState, useEffect, useRef, useCallback } = React
 const SAVE_DELAY = 300
 let uploadSeq = 0
 
-export function useIdeas() {
+// placeRef.current(idea, hint) 返回新灵感在画布上的位置（不在画布时返回 undefined）
+export function useIdeas({ placeRef } = {}) {
   const [ideas, setIdeas] = useState(() => loadIdeas() || [])
   // 同步状态：loading 正在连 host；host 已与 host 同步；local 只存在本浏览器
   const [sync, setSync] = useState('loading')
@@ -74,7 +75,11 @@ export function useIdeas() {
       : it))
   }, [])
 
-  const add = useCallback(idea => {
+  const add = useCallback((idea, hint) => {
+    if (!idea.pos && placeRef?.current) {
+      const pos = placeRef.current(idea, hint)
+      if (pos) idea = { ...idea, pos }
+    }
     setIdeas(prev => [idea, ...prev])
     // 链接 / 平台视频：后台抓标题和封面
     if (idea.url && (idea.kind === 'link' || idea.kind === 'video') && !isDirectMedia(idea.url)) {
@@ -87,10 +92,10 @@ export function useIdeas() {
   }, [update])
 
   // 文字 / 网址 / 分享文案
-  const addFromInput = useCallback((input, { tags, pos } = {}) => add(ideaFromInput({ input, tags, pos })), [add])
+  const addFromInput = useCallback((input, { tags, hint } = {}) => add(ideaFromInput({ input, tags }), hint), [add])
 
-  // 图片 / 视频文件：先上传再生成灵感。posFor(i) 给出第 i 个文件在画布上的位置。
-  const addFiles = useCallback(async (fileList, { tags, text, posFor } = {}) => {
+  // 图片 / 视频文件：先上传再生成灵感。hint 传给 placeRef（如拖放落点）。
+  const addFiles = useCallback(async (fileList, { tags, text, hint } = {}) => {
     const files = [...fileList].filter(f => /^(image|video)\//.test(f.type))
     const results = await Promise.all(files.map(async (file, i) => {
       const uid = `up_${++uploadSeq}`
@@ -102,7 +107,7 @@ export function useIdeas() {
           kind === 'image' ? imageSize(file) : null,
         ])
         setUploads(prev => prev.filter(u => u.id !== uid))
-        return add(createIdea({ kind, file: { ...meta, ...(size || {}) }, text, tags, pos: posFor?.(i) }))
+        return add(createIdea({ kind, file: { ...meta, ...(size || {}) }, text, tags }), hint)
       } catch (err) {
         setUploads(prev => prev.map(u => u.id === uid ? { ...u, error: err.message } : u))
         return null

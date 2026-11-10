@@ -1,16 +1,20 @@
-// 灵感页：录入多种形式的灵感，信息流 / 画布两种视图，共用一套筛选。
+// 灵感页：录入多种形式的灵感，信息流 / 画布两种视图，共用一套筛选；
+// 记下新灵感或点“相关”时，把相关的旧灵感找出来。
 import React from 'react'
 import { KINDS, sortIdeas, filterIdeas, collectTags, countKinds } from '../../src/ideas.js'
 import { useIdeas } from './useIdeas.js'
 import { Composer, mediaFilesOf } from './Composer.jsx'
 import { FeedView } from './FeedView.jsx'
 import { CanvasView } from './CanvasView.jsx'
-import { autoPlace, toWorld, CARD_W, GAP } from './layout.js'
+import { relatedIdeas } from './related.js'
+import { autoPlace, toWorld, cardSize, rectOf, findFreeSpot } from './layout.js'
 
 const { useState, useMemo, useEffect, useRef, useCallback } = React
 
 const MODE_KEY = 'we-media-desk:ideas-mode'
 const CANVAS_KEY = 'we-media-desk:canvas-view'
+const HIGHLIGHT_MS = 2400
+const DEFAULT_VIEW = { x: 0, y: 0, zoom: 0.9 }
 
 function readLocal(key, fallback) {
   try {
@@ -28,9 +32,17 @@ function isEditable(el) {
   return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
 }
 
+function labelOf(it) {
+  const s = (it.text || it.preview?.title || it.url || '').replace(/\s+/g, ' ').trim()
+  return s.length > 16 ? s.slice(0, 16) + '…' : s
+}
+
 export function IdeasPanel() {
-  const store = useIdeas()
+  const placeRef = useRef(null)
+  const store = useIdeas({ placeRef })
   const { ideas } = store
+  const ideasRef = useRef(ideas)
+  ideasRef.current = ideas
 
   const [mode, setMode] = useState(() => (readLocal(MODE_KEY, 'feed') === 'canvas' ? 'canvas' : 'feed'))
   const [query, setQuery] = useState('')
@@ -39,38 +51,90 @@ export function IdeasPanel() {
   const [showArchived, setShowArchived] = useState(false)
   const [lightbox, setLightbox] = useState('')
   const [dropping, setDropping] = useState(false)
+  const [highlight, setHighlight] = useState('')   // 刚记下的灵感，短暂高亮
+  const [related, setRelated] = useState(null)     // { anchorId, ids, label }
 
   const [view, setView] = useState(() => {
     const v = readLocal(CANVAS_KEY, null)
-    return v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.zoom) ? v : { x: 40, y: 40, zoom: 1 }
+    return v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.zoom) ? v : null
   })
   const viewportRef = useRef(null)
+  // 视图还没初始化时，函数式更新从默认视图开始算
+  const setCanvasView = useCallback(u => setView(v => (typeof u === 'function' ? u(v || DEFAULT_VIEW) : u)), [])
+  const viewRef = useRef(view)
+  viewRef.current = view
 
   useEffect(() => { writeLocal(MODE_KEY, mode) }, [mode])
   useEffect(() => {
+    if (!view) return
     const t = setTimeout(() => writeLocal(CANVAS_KEY, view), 300)
     return () => clearTimeout(t)
   }, [view])
 
-  // 画布：给还没有位置的灵感自动摆位，并保存下来
+  // 第一次打开画布：让原点落在视野中央
+  useEffect(() => {
+    if (mode !== 'canvas' || view || !viewportRef.current) return
+    const el = viewportRef.current
+    setView({ x: el.clientWidth / 2, y: el.clientHeight / 2, zoom: 0.9 })
+  }, [mode, view])
+
+  // 画布：给还没有位置的灵感自动找空位，并保存下来
   const positions = useMemo(() => autoPlace(ideas), [ideas])
   useEffect(() => {
     if (mode === 'canvas' && Object.keys(positions).length) store.placeMany(positions)
   }, [mode, positions, store.placeMany])
 
-  // 新灵感在画布上的位置：落点（拖放）或当前视野中央
-  const posFor = useCallback((point) => (i = 0) => {
-    if (mode !== 'canvas' || !viewportRef.current) return undefined
+  // 新灵感在画布上的位置：落点（拖放）或视野中央附近的空位
+  const reserved = useRef([]) // 刚放下、还没进 state 的卡片，避免连续添加时叠在一起
+  placeRef.current = (idea, hint) => {
     const el = viewportRef.current
+    const v = viewRef.current
+    if (mode !== 'canvas' || !el || !v) return undefined
     const rect = el.getBoundingClientRect()
-    const sx = point ? point.x - rect.left : el.clientWidth / 2 - (CARD_W * view.zoom) / 2
-    const sy = point ? point.y - rect.top : el.clientHeight / 3
-    const p = toWorld(view, sx, sy)
-    return { x: p.x + i * (CARD_W + GAP), y: p.y }
-  }, [mode, view])
+    const anchor = hint?.point
+      ? toWorld(v, hint.point.x - rect.left, hint.point.y - rect.top)
+      : toWorld(v, el.clientWidth / 2, el.clientHeight / 2)
+    const now = Date.now()
+    reserved.current = reserved.current.filter(r => now - r.at < 3000)
+    const obstacles = [
+      ...ideasRef.current.filter(it => it.pos).map(it => rectOf(it, it.pos)),
+      ...reserved.current,
+    ]
+    const size = cardSize(idea)
+    const pos = findFreeSpot(size, anchor, obstacles)
+    reserved.current.push({ ...pos, ...size, at: now })
+    return pos
+  }
 
-  const addText = useCallback((input, tags, point) => store.addFromInput(input, { tags, pos: posFor(point)(0) }), [store.addFromInput, posFor])
-  const addFiles = useCallback((files, opts = {}, point) => store.addFiles(files, { ...opts, posFor: posFor(point) }), [store.addFiles, posFor])
+  // 高亮刚记下的灵感（画布上它在视野外时，镜头会带过去）
+  const flash = useCallback(id => {
+    if (!id) return
+    setHighlight(id)
+  }, [])
+  useEffect(() => {
+    if (!highlight) return
+    const t = setTimeout(() => setHighlight(''), HIGHLIGHT_MS)
+    return () => clearTimeout(t)
+  }, [highlight])
+
+  const showRelated = useCallback((anchor, { always = false } = {}) => {
+    const ids = relatedIdeas(ideasRef.current, anchor)
+    if (!ids.length && !always) { setRelated(null); return }
+    setRelated({ anchorId: anchor.id, ids, label: labelOf(anchor) })
+  }, [])
+
+  const addText = useCallback((input, tags, point) => {
+    const idea = store.addFromInput(input, { tags, hint: point && { point } })
+    flash(idea.id)
+    showRelated(idea)
+    return idea
+  }, [store.addFromInput, flash, showRelated])
+
+  const addFiles = useCallback(async (files, opts = {}, point) => {
+    const added = await store.addFiles(files, { ...opts, hint: point && { point } })
+    if (added.length) flash(added[added.length - 1].id)
+    return added
+  }, [store.addFiles, flash])
 
   // 页面任意处粘贴（输入框内的粘贴交给输入框自己处理）
   useEffect(() => {
@@ -85,12 +149,25 @@ export function IdeasPanel() {
     return () => document.removeEventListener('paste', onPaste)
   }, [addFiles, addText])
 
+  // Esc：先关大图，再退出相关
   useEffect(() => {
-    if (!lightbox) return
-    const onKey = e => { if (e.key === 'Escape') setLightbox('') }
+    if (!lightbox && !related) return
+    const onKey = e => {
+      if (e.key !== 'Escape') return
+      if (lightbox) setLightbox('')
+      else setRelated(null)
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [lightbox])
+  }, [lightbox, related])
+
+  // 相关的灵感被删掉时同步更新
+  useEffect(() => {
+    if (!related) return
+    const ids = new Set(ideas.map(it => it.id))
+    if (!ids.has(related.anchorId)) { setRelated(null); return }
+    if (related.ids.some(id => !ids.has(id))) setRelated(r => ({ ...r, ids: r.ids.filter(id => ids.has(id)) }))
+  }, [ideas, related])
 
   // 拖入文件 / 链接
   function onDragOver(e) {
@@ -115,6 +192,16 @@ export function IdeasPanel() {
     () => sortIdeas(filterIdeas(ideas, { query, tag: activeTag, kinds, includeArchived: showArchived })),
     [ideas, query, activeTag, kinds, showArchived]
   )
+  const byId = useMemo(() => new Map(ideas.map(it => [it.id, it])), [ideas])
+  const relatedItems = useMemo(() => (related ? related.ids.map(id => byId.get(id)).filter(Boolean) : []), [related, byId])
+  // 画布在相关模式下，相关卡片即使被筛选掉也要显示
+  const canvasItems = useMemo(() => {
+    if (!related) return visible
+    const shown = new Set(visible.map(it => it.id))
+    const extra = [related.anchorId, ...related.ids].filter(id => !shown.has(id)).map(id => byId.get(id)).filter(Boolean)
+    return extra.length ? [...visible, ...extra] : visible
+  }, [visible, related, byId])
+
   const archivedCount = useMemo(() => ideas.filter(i => i.archived).length, [ideas])
   const filtering = Boolean(query || activeTag || kinds.length)
 
@@ -125,14 +212,22 @@ export function IdeasPanel() {
     setQuery(''); setActiveTag(''); setKinds([])
   }
 
-  const cardProps = {
+  const onRelated = useCallback(id => {
+    const it = ideasRef.current.find(x => x.id === id)
+    if (it) showRelated(it, { always: true })
+  }, [showRelated])
+  const closeRelated = useCallback(() => setRelated(null), [])
+
+  // 保持稳定，卡片才能跳过不必要的重绘
+  const cardProps = useMemo(() => ({
     onPin: store.togglePin,
     onArchive: store.toggleArchive,
     onDelete: store.remove,
     onEdit: store.update,
     onOpenImage: setLightbox,
-    onTag: t => setActiveTag(t),
-  }
+    onTag: setActiveTag,
+    onRelated,
+  }), [store.togglePin, store.toggleArchive, store.remove, store.update, onRelated])
 
   const emptyText = ideas.length === 0 ? '还没有灵感，先记一条吧' : '没有匹配的灵感'
 
@@ -193,17 +288,30 @@ export function IdeasPanel() {
       )}
 
       {mode === 'feed' ? (
-        visible.length ? <FeedView items={visible} cardProps={cardProps} /> : <p className="wk-empty">{emptyText}</p>
+        visible.length || related ? (
+          <FeedView
+            items={visible}
+            cardProps={cardProps}
+            related={related}
+            relatedItems={relatedItems}
+            anchor={related?.label}
+            onCloseRelated={closeRelated}
+            highlight={highlight}
+          />
+        ) : <p className="wk-empty">{emptyText}</p>
       ) : (
         <CanvasView
-          items={visible}
+          items={canvasItems}
           positions={positions}
-          view={view}
-          setView={setView}
+          view={view || DEFAULT_VIEW}
+          setView={setCanvasView}
           viewportRef={viewportRef}
           cardProps={cardProps}
           onMove={store.move}
           emptyText={emptyText}
+          related={related}
+          onCloseRelated={closeRelated}
+          highlight={highlight}
         />
       )}
 

@@ -1,22 +1,66 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { autoPlace, fitView, zoomAt, toWorld, clampZoom, CARD_W, GAP } from '../client/ideas/layout.js'
+import {
+  autoPlace, findFreeSpot, cardSize, rectOf, fitRects, zoomAt, toWorld, clampZoom,
+  rectVisible, centerOn, masonryColumns, tilt, cardWidth, GAP,
+} from '../client/ideas/layout.js'
 
-test('autoPlace 只给没有位置的灵感排位，按时间从早到晚、放在已有内容下方', () => {
-  const ideas = [
-    { id: 'p', kind: 'text', text: 'x', pos: { x: 100, y: 0 } },
-    { id: 'late', kind: 'text', text: 'b', createdAt: 2 },
-    { id: 'early', kind: 'text', text: 'a', createdAt: 1 },
-  ]
+const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+
+function sample(n) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: 'i' + i,
+    kind: ['text', 'image', 'link', 'video'][i % 4],
+    text: 'x'.repeat((i * 37) % 120),
+    url: 'https://a.example',
+    file: i % 4 === 1 ? { name: 'f.png', mime: 'image/png', w: 400 + i * 10, h: 300 + (i % 5) * 80 } : undefined,
+    tags: i % 3 ? ['t'] : [],
+    createdAt: i,
+  }))
+}
+
+test('autoPlace 摆出来的卡片互不重叠，已摆好的不动', () => {
+  const fixed = { id: 'fixed', kind: 'text', text: 'hi', tags: [], pos: { x: 0, y: 0 }, createdAt: 100 }
+  const ideas = [fixed, ...sample(60)]
   const out = autoPlace(ideas)
-  assert.deepEqual(Object.keys(out).sort(), ['early', 'late'])
-  assert.equal(out.early.x, 100)
-  assert.equal(out.late.x, 100 + CARD_W + GAP)
-  assert.ok(out.early.y > 0)
-  assert.deepEqual(autoPlace([{ id: 'p', pos: { x: 0, y: 0 } }]), {})
+  assert.equal(out.fixed, undefined)
+  assert.equal(Object.keys(out).length, 60)
+  const rects = ideas.map(it => rectOf(it, it.pos || out[it.id]))
+  for (let i = 0; i < rects.length; i++) {
+    for (let j = i + 1; j < rects.length; j++) assert.ok(!overlap(rects[i], rects[j]), `${ideas[i].id} 与 ${ideas[j].id} 重叠`)
+  }
+  assert.deepEqual(autoPlace([fixed]), {})
 })
 
-test('zoomAt 以指定点为中心缩放，toWorld 能换算回同一点', () => {
+test('autoPlace 越新的灵感越靠近中心', () => {
+  const ideas = sample(30)
+  const out = autoPlace(ideas)
+  const dist = it => { const r = rectOf(it, out[it.id]); return Math.hypot(r.x + r.w / 2, r.y + r.h / 2) }
+  const newest = ideas[ideas.length - 1]
+  const oldest = ideas[0]
+  assert.ok(dist(newest) < dist(oldest))
+  assert.ok(dist(newest) < 60)
+})
+
+test('findFreeSpot 避开障碍物；空白时直接放在锚点中央', () => {
+  const size = { w: 200, h: 100 }
+  assert.deepEqual(findFreeSpot(size, { x: 0, y: 0 }, []), { x: -100, y: -50 })
+  const blocker = { x: -150, y: -80, w: 300, h: 160 }
+  const p = findFreeSpot(size, { x: 0, y: 0 }, [blocker])
+  assert.ok(!overlap({ ...p, ...size }, { x: blocker.x - GAP, y: blocker.y - GAP, w: blocker.w + GAP * 2, h: blocker.h + GAP * 2 }))
+})
+
+test('卡片宽度和倾斜按 id 稳定', () => {
+  const a = { id: 'abc', kind: 'image', file: { name: 'f.png', mime: 'image/png' } }
+  assert.equal(cardWidth(a), cardWidth({ ...a }))
+  assert.equal(tilt(a), tilt({ ...a }))
+  assert.ok(Math.abs(tilt(a)) <= 1.6)
+  assert.equal(cardWidth({ id: 'x', kind: 'text' }), 248)
+  const ratio = cardSize({ id: 'p', kind: 'image', file: { w: 100, h: 200 } })
+  assert.ok(ratio.h > ratio.w)
+})
+
+test('zoomAt / toWorld / clampZoom', () => {
   const v = { x: 50, y: 20, zoom: 1 }
   const before = toWorld(v, 300, 200)
   const next = zoomAt(v, 2, 300, 200)
@@ -26,10 +70,33 @@ test('zoomAt 以指定点为中心缩放，toWorld 能换算回同一点', () =>
   assert.equal(clampZoom(0), 0.2)
 })
 
-test('fitView 能装下所有卡片且不放大超过 100%', () => {
-  const items = [{ id: 'a', kind: 'text', text: 'x', pos: { x: 0, y: 0 } }, { id: 'b', kind: 'text', text: 'y', pos: { x: 3000, y: 0 } }]
-  const v = fitView(items, 1000, 600)
-  assert.ok(v.zoom < 1 && v.zoom >= 0.2)
-  assert.ok(v.x + 3000 * v.zoom + CARD_W * v.zoom <= 1000)
-  assert.equal(fitView([{ id: 'a', kind: 'text', text: 'x', pos: { x: 0, y: 0 } }], 1000, 600).zoom, 1)
+test('fitRects 能装下所有矩形且居中；rectVisible / centerOn', () => {
+  const rects = [{ x: 0, y: 0, w: 200, h: 100 }, { x: 3000, y: 500, w: 200, h: 100 }]
+  const v = fitRects(rects, 1000, 600)
+  assert.ok(v.zoom < 1)
+  for (const r of rects) assert.ok(rectVisible(v, r, 1000, 600, 0))
+  const one = fitRects([{ x: 0, y: 0, w: 200, h: 100 }], 1000, 600)
+  assert.equal(one.zoom, 1)
+  assert.deepEqual({ x: one.x, y: one.y }, { x: 400, y: 250 })
+
+  const far = { x: 5000, y: 5000, w: 200, h: 100 }
+  const view = { x: 0, y: 0, zoom: 1 }
+  assert.equal(rectVisible(view, far, 1000, 600), false)
+  const c = centerOn(view, far, 1000, 600)
+  assert.ok(rectVisible(c, far, 1000, 600))
+})
+
+test('masonryColumns 均衡分列，且保持时间顺序', () => {
+  const items = sample(12)
+  const cols = masonryColumns(items, 3, 240)
+  assert.equal(cols.length, 3)
+  assert.equal(cols.flat().length, 12)
+  // 前三条分别进三列
+  assert.deepEqual(cols.map(c => c[0].id), ['i0', 'i1', 'i2'])
+  // 每列内部仍按原顺序
+  for (const c of cols) {
+    const idx = c.map(it => items.indexOf(it))
+    assert.deepEqual(idx, [...idx].sort((a, b) => a - b))
+  }
+  assert.equal(masonryColumns(items, 1, 240)[0].length, 12)
 })

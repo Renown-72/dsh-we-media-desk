@@ -3,7 +3,7 @@ import React from 'react'
 import { KINDS, parseTags, siteName, isDirectMedia } from '../../src/ideas.js'
 import { fileUrl } from '../storage.js'
 
-const { useState } = React
+const { useState, useRef } = React
 
 const KIND_LABEL = Object.fromEntries(KINDS.map(k => [k.id, k.label]))
 const KIND_ICON = { text: '✎', image: '▣', link: '🔗', video: '▶' }
@@ -40,6 +40,45 @@ function LinkPreview({ idea }) {
   )
 }
 
+// 视频：鼠标停留时静音循环预览，点一下切换成带声音、带控制条的播放器
+function VideoClip({ src }) {
+  const ref = useRef(null)
+  const [full, setFull] = useState(false)
+  const [broken, setBroken] = useState(false)
+  function preview(on) {
+    const v = ref.current
+    if (!v || full) return
+    if (on) v.play().catch(() => {})
+    else { v.pause(); v.currentTime = 0.1 }
+  }
+  function open() {
+    const v = ref.current
+    if (!v || full) return
+    setFull(true)
+    v.muted = false
+    v.currentTime = 0
+    v.play().catch(() => {})
+  }
+  if (broken) return <div className="wk-media wk-media-broken">视频无法播放</div>
+  return (
+    <div className={'wk-media wk-video' + (full ? ' is-full' : '')}
+      onMouseEnter={() => preview(true)} onMouseLeave={() => preview(false)}>
+      <video
+        ref={ref}
+        src={src + '#t=0.1'}
+        muted={!full}
+        loop={!full}
+        controls={full}
+        playsInline
+        preload="metadata"
+        onClick={open}
+        onError={() => setBroken(true)}
+      />
+      {!full && <span className="wk-play" aria-hidden="true">▶</span>}
+    </div>
+  )
+}
+
 function Body({ idea, onOpenImage }) {
   switch (idea.kind) {
     case 'image': {
@@ -54,11 +93,7 @@ function Body({ idea, onOpenImage }) {
     }
     case 'video':
       if (idea.file || isDirectMedia(idea.url)) {
-        return (
-          <div className="wk-media">
-            <video src={mediaSrc(idea)} controls preload="metadata" />
-          </div>
-        )
+        return <VideoClip src={mediaSrc(idea)} />
       }
       return <LinkPreview idea={idea} />
     case 'link':
@@ -99,7 +134,7 @@ function Editor({ idea, onSave, onCancel }) {
   )
 }
 
-export function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive, onDelete, onEdit, onOpenImage, onTag }) {
+export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive, onDelete, onEdit, onOpenImage, onTag, onRelated }) {
   const [editing, setEditing] = useState(false)
   const kind = idea.kind || 'text'
 
@@ -115,6 +150,7 @@ export function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive
         {idea.pinned && <span className="wk-pin" title="已置顶">📌</span>}
         <span className="wk-time">{timeLabel(idea.createdAt, variant === 'canvas')}</span>
         <div className="wk-card-actions" onPointerDown={e => e.stopPropagation()}>
+          {onRelated && <button className="wk-mini" title="把相关的灵感找出来" onClick={() => onRelated(idea.id)}>相关</button>}
           <button className="wk-mini" onClick={() => setEditing(v => !v)}>编辑</button>
           <button className="wk-mini" onClick={() => onPin(idea.id)}>{idea.pinned ? '取消置顶' : '置顶'}</button>
           <button className="wk-mini" onClick={() => onArchive(idea.id)}>{idea.archived ? '取消归档' : '归档'}</button>
@@ -143,4 +179,4 @@ export function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive
       )}
     </div>
   )
-}
+})
