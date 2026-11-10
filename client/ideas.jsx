@@ -1,8 +1,9 @@
 // 灵感面板：记录、搜索、筛选、置顶、编辑、归档、删除。
 import React from 'react'
 import { createIdea, sortIdeas, filterIdeas, collectTags, parseTags } from '../src/ideas.js'
+import { loadIdeas, saveIdeas } from './storage.js'
 
-const { useState, useMemo } = React
+const { useState, useMemo, useEffect } = React
 
 function TagChip({ tag, count, active, onClick }) {
   return (
@@ -58,11 +59,14 @@ function IdeaCard({ idea, onPin, onArchive, onDelete, onEdit }) {
 }
 
 export function IdeasPanel() {
-  const [ideas, setIdeas] = useState([])
+  const [ideas, setIdeas] = useState(() => loadIdeas() || [])
   const [draft, setDraft] = useState('')
   const [tagDraft, setTagDraft] = useState('')
   const [query, setQuery] = useState('')
   const [activeTag, setActiveTag] = useState('')
+
+  // 变更后持久化（刷新不丢）
+  useEffect(() => { saveIdeas(ideas) }, [ideas])
 
   function add() {
     const text = draft.trim()
