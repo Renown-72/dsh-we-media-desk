@@ -1,4 +1,4 @@
-// 周表：本周灵感概览——六个数据格、每日灵感预览、灵感时段热力、一句小结。
+// 周表：本周灵感概览——六个数据格、每日灵感预览、六个时段的分布、一句小结。
 import React from 'react'
 import { isDirectMedia } from '../../src/ideas.js'
 import { fileUrl } from '../storage.js'
@@ -6,15 +6,15 @@ import { Icon } from '../icons.jsx'
 
 const MAX_PER_DAY = 3
 const KIND_ICON = { text: 'text', image: 'image', link: 'link', video: 'play' }
-const SHORT_DAY = ['一', '二', '三', '四', '五', '六', '日']
 
-function Tile({ label, value, sub, accent }) {
+function Tile({ label, value, sub, accent, onClick, title }) {
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div className={'wk-tile' + (accent ? ' is-accent' : '')}>
+    <Tag className={'wk-tile' + (accent ? ' is-accent' : '') + (onClick ? ' is-link' : '')} onClick={onClick} title={title}>
       <div className="wk-tile-label">{label}</div>
       <div className="wk-tile-value">{value}</div>
       <div className="wk-tile-sub">{sub}</div>
-    </div>
+    </Tag>
   )
 }
 
@@ -54,7 +54,7 @@ function compare(total, prev) {
 }
 
 export const WeekBoard = React.memo(function WeekBoard({ stats: s, onPrev, onNext, onThisWeek, onOpenIdea }) {
-  const peakCount = s.peak == null ? 0 : s.heat.reduce((n, row) => n + row[s.peak], 0)
+  const fast = s.fastest
   return (
     <section className="wk-board" aria-label="周表">
       <header className="wk-board-head">
@@ -72,9 +72,10 @@ export const WeekBoard = React.memo(function WeekBoard({ stats: s, onPrev, onNex
       <div className="wk-tiles">
         <Tile label="本周灵感" value={s.total} sub={compare(s.total, s.prevTotal)} accent />
         <Tile label="活跃天数" value={<>{s.activeDays}<small> / {s.elapsedDays}</small></>} sub={s.activeDays === s.elapsedDays && s.total ? '每天都有记录' : '有记录的天数'} />
-        <Tile label="高峰时段" value={s.peakLabel} sub={s.peak == null ? '还没有记录' : `${peakCount} 条记在这个钟点`} />
+        <Tile label="高峰时段" value={s.peakLabel} sub={s.peak == null ? '还没有记录' : `${s.periods[s.peak].range} · ${s.periodMax} 条`} />
         <Tile label="完稿灵感" value={s.done} sub={s.doneOfWeek ? `本周记下的已完稿 ${s.doneOfWeek} 条` : '本周标记完稿的数量'} />
-        <Tile label="最常记录" value={s.topKind ? s.topKind.label : '—'} sub={s.topKind ? `${s.topKind.count} 条` : '还没有记录'} />
+        <Tile label="最快完稿" value={fast ? fast.label : '—'} sub={fast ? (fast.text ? `「${fast.text}」` : '从记下到完稿') : '从记下到完稿的最短用时'}
+          onClick={fast ? () => onOpenIdea(fast.id) : undefined} title={fast ? `从记下到完稿用了 ${fast.label}：${fast.text || '（无文字）'}` : undefined} />
         <Tile label="最常用标签" value={s.topTag ? '#' + s.topTag.tag : '—'} sub={s.topTag ? `用了 ${s.topTag.count} 次` : '写 #标签 来归类'} />
       </div>
 
@@ -97,22 +98,17 @@ export const WeekBoard = React.memo(function WeekBoard({ stats: s, onPrev, onNex
       </div>
 
       <div className="wk-board-sec">
-        <div className="wk-sec-title">灵感时段<span>颜色越深，这个钟点记下的越多</span></div>
-        <div className="wk-heat">
-          <span />
-          <div className="wk-heat-hours">
-            {[0, 6, 12, 18].map(h => <span key={h} style={{ gridColumn: h + 1 }}>{h}时</span>)}
-          </div>
-          {s.heat.map((row, i) => (
-            <React.Fragment key={i}>
-              <span className="wk-heat-day">{SHORT_DAY[i]}</span>
-              <div className="wk-heat-row">
-                {row.map((n, h) => {
-                  const lv = n === 0 ? 0 : Math.max(1, Math.ceil((n / s.heatMax) * 4))
-                  return <span key={h} className={'wk-heat-cell lv-' + lv} title={`周${SHORT_DAY[i]} ${h}:00 · ${n ? n + ' 条' : '没有'}`} />
-                })}
+        <div className="wk-sec-title">灵感时段<span>本周各时段记下的条数</span></div>
+        <div className="wk-periods">
+          {s.periods.map((p, i) => (
+            <div key={p.id} className={'wk-period' + (i === s.peak ? ' is-peak' : '') + (p.count ? '' : ' is-zero')} title={`${p.label} ${p.range} · ${p.count} 条`}>
+              <div className="wk-period-count">{p.count || ''}</div>
+              <div className="wk-period-track">
+                <div className="wk-period-bar" style={{ height: p.count ? `${Math.max(6, (p.count / s.periodMax) * 100)}%` : 0 }} />
               </div>
-            </React.Fragment>
+              <div className="wk-period-label">{p.label}</div>
+              <div className="wk-period-range">{p.range}</div>
+            </div>
           ))}
         </div>
       </div>

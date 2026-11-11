@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { weekStats, weekStart, hourLabel } from '../client/ideas/stats.js'
+import { weekStats, weekStart, periodOf, formatDuration } from '../client/ideas/stats.js'
 import { splitHashtags } from '../src/ideas.js'
 
 const at = (m, d, h = 12, min = 0) => new Date(2026, m - 1, d, h, min).getTime()
@@ -12,15 +12,16 @@ test('weekStart 取周一 0 点，可前后翻周', () => {
   assert.equal(weekStart(at(11, 10), 1), at(11, 16, 0))
 })
 
-test('hourLabel', () => {
-  assert.equal(hourLabel(21), '晚上 9 点')
-  assert.equal(hourLabel(9), '上午 9 点')
-  assert.equal(hourLabel(12), '中午 12 点')
-  assert.equal(hourLabel(2), '凌晨 2 点')
-  assert.equal(hourLabel(null), '—')
+test('periodOf 和 formatDuration', () => {
+  assert.deepEqual([0, 4, 5, 9, 12, 14, 18, 22, 23].map(periodOf), [5, 5, 0, 1, 2, 3, 4, 4, 5])
+  assert.equal(formatDuration(20000), '1 分钟内')
+  assert.equal(formatDuration(8 * 60000), '8 分钟')
+  assert.equal(formatDuration(135 * 60000), '2 小时 15 分')
+  assert.equal(formatDuration(3 * 3600000), '3 小时')
+  assert.equal(formatDuration(76 * 3600000), '3 天 4 小时')
 })
 
-test('weekStats 统计本周灵感、活跃天数、高峰时段、完稿、常用类型和标签', () => {
+test('weekStats 统计本周灵感、活跃天数、高峰时段、完稿、最快完稿和常用标签', () => {
   const now = at(11, 12, 18) // 周四
   const ideas = [
     { id: 'a', kind: 'image', tags: ['封面'], createdAt: at(11, 9, 21, 5) },
@@ -36,18 +37,19 @@ test('weekStats 统计本周灵感、活跃天数、高峰时段、完稿、常�
   assert.equal(s.prevTotal, 2)
   assert.equal(s.activeDays, 3)
   assert.equal(s.elapsedDays, 4)
-  assert.equal(s.peak, 21)
-  assert.equal(s.peakLabel, '晚上 9 点')
+  assert.equal(s.peak, 4)
+  assert.equal(s.peakLabel, '晚上')
   assert.equal(s.done, 2)
   assert.equal(s.doneOfWeek, 1)
-  assert.deepEqual(s.topKind, { id: 'image', label: '图片', count: 2 })
+  assert.equal(s.fastest.id, 'b')
+  assert.equal(s.fastest.label, '1 天 12 小时')
   assert.deepEqual(s.topTag, { tag: '封面', count: 2 })
   assert.deepEqual(s.days.map(d => d.items.length), [2, 0, 1, 1, 0, 0, 0])
   assert.equal(s.days[3].today, true)
   assert.equal(s.days[4].future, true)
   assert.equal(s.days[3].future, false)
-  assert.equal(s.heat[0][21], 2)
-  assert.equal(s.heatMax, 2)
+  assert.deepEqual(s.periods.map(p => p.count), [1, 0, 0, 0, 2, 1])
+  assert.equal(s.periodMax, 2)
   assert.deepEqual(s.earliest, { day: '周三', time: '07:12' })
   assert.deepEqual(s.latest, { day: '周四', time: '23:30' })
   assert.equal(s.range, '11 月 9 日 – 11 月 15 日')
@@ -58,7 +60,8 @@ test('weekStats 空周和翻到上周', () => {
   const empty = weekStats([], { now })
   assert.equal(empty.total, 0)
   assert.equal(empty.peak, null)
-  assert.equal(empty.topKind, null)
+  assert.equal(empty.fastest, null)
+  assert.equal(empty.periodMax, 0)
   assert.equal(empty.earliest, null)
   const prev = weekStats([{ id: 'x', kind: 'text', tags: [], createdAt: at(11, 3, 8) }], { now, offset: -1 })
   assert.equal(prev.total, 1)
