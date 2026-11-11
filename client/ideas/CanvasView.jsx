@@ -2,8 +2,10 @@
 // 镜头移动带缓动；新灵感落在视野外时镜头会带过去；“相关”时相关卡片聚到中心卡片周围。
 import React from 'react'
 import { IdeaCard } from './IdeaCard.jsx'
+import { clusterLayout } from './cluster.js'
 import { Icon } from '../icons.jsx'
 import {
+  toWorld,
   cardSize, rectOf, tilt, zoomAt, fitRects, findFreeSpot, rectVisible, centerOn,
 } from './layout.js'
 
@@ -102,7 +104,7 @@ const CanvasItem = React.memo(function CanvasItem({ idea, x, y, w, z, angle, dra
 
 export function CanvasView({
   items, positions, view, setView, viewportRef, cardProps, onMove,
-  related, onCloseRelated, highlight, board, boardNode, homeTick, focus, sizes, onMeasure,
+  related, onCloseRelated, cluster, onCloseCluster, highlight, board, boardNode, homeTick, focus, sizes, onMeasure,
 }) {
   // 一个 ResizeObserver 观察所有卡片，尺寸变化批量回报
   const onMeasureRef = useRef(onMeasure)
@@ -128,7 +130,7 @@ export function CanvasView({
 
   // 相关模式：相关卡片聚到中心卡片四周（只是临时显示位置，不保存）
   const byId = useMemo(() => new Map(items.map(it => [it.id, it])), [items])
-  const gather = useMemo(() => {
+  const relatedGather = useMemo(() => {
     if (!related) return null
     const anchor = byId.get(related.anchorId)
     if (!anchor) return null
@@ -148,9 +150,21 @@ export function CanvasView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [related, byId])
 
+  // 汇聚模式：选中的脚本 / 标签各成一簇，排在当前视野中央（临时位置，不保存）
+  const clusterGather = useMemo(() => {
+    if (!cluster?.groups.length) return null
+    const el = viewportRef.current
+    const v = viewRef.current
+    const center = el ? toWorld(v, el.clientWidth / 2, el.clientHeight / 2) : { x: 0, y: 0 }
+    return clusterLayout(cluster.groups, byId, sizes, center)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cluster, byId])
+  const gather = relatedGather || clusterGather
+  const active = related || (cluster?.groups.length ? cluster : null)
+
   // 相关模式里被手动拖过的卡片，留在拖到的位置
   const released = useRef(new Set())
-  useEffect(() => { released.current = new Set() }, [related])
+  useEffect(() => { released.current = new Set() }, [related, cluster])
 
   const posOf = useCallback(it => {
     if (dragRef.current?.id === it.id) return dragRef.current
@@ -164,14 +178,14 @@ export function CanvasView({
   useEffect(() => {
     const el = viewportRef.current
     if (!gather || !el) return
-    animateTo(fitRects(gather.rects, el.clientWidth, el.clientHeight, { padding: 64, maxZoom: 1 }))
+    animateTo(fitRects(gather.rects, el.clientWidth, el.clientHeight, { padding: 110, maxZoom: 1 }))
   }, [gather, animateTo, viewportRef])
 
   // 新记下的灵感不在视野里时，镜头带过去
   useEffect(() => {
     const el = viewportRef.current
     const it = highlight && byId.get(highlight)
-    if (!it || !el || related) return
+    if (!it || !el || active) return
     const rect = rectOf(it, posOfRef.current(it), sizes)
     if (!rectVisible(viewRef.current, rect, el.clientWidth, el.clientHeight)) {
       animateTo(centerOn(viewRef.current, rect, el.clientWidth, el.clientHeight))
@@ -273,7 +287,7 @@ export function CanvasView({
     if (g.type === 'pan') {
       if (!g.moved) {
         // 点空白处：退出相关模式
-        if (related && e.type === 'pointerup') onCloseRelated()
+        if (e.type === 'pointerup') { if (related) onCloseRelated(); else if (active) onCloseCluster?.() }
         return
       }
       const s = g.samples
@@ -282,7 +296,7 @@ export function CanvasView({
       const dt = last.t - first.t
       if (dt > 0 && performance.now() - last.t < 60) glide((last.x - first.x) / dt, (last.y - first.y) / dt)
     } else if (g.moved && dragRef.current) {
-      if (related) released.current.add(g.id)
+      if (active) released.current.add(g.id)
       onMove(g.id, { x: dragRef.current.x, y: dragRef.current.y })
     }
     dragRef.current = null
@@ -302,12 +316,12 @@ export function CanvasView({
     animateTo(fitRects(rects, el.clientWidth, el.clientHeight))
   }
 
-  const relatedSet = useMemo(() => new Set(related ? [related.anchorId, ...related.ids] : []), [related])
+  const relatedSet = useMemo(() => new Set(related ? [related.anchorId, ...related.ids] : clusterGather ? Object.keys(clusterGather.pos) : []), [related, clusterGather])
   const grid = 24 * view.zoom
   return (
     <div
       ref={viewportRef}
-      className={'wk-canvas' + (panning ? ' is-panning' : '') + (related ? ' is-related' : '')}
+      className={'wk-canvas' + (panning ? ' is-panning' : '') + (active ? ' is-related' : '')}
       style={{ backgroundSize: `${grid}px ${grid}px`, backgroundPosition: `${view.x}px ${view.y}px` }}
       onPointerDown={startPan}
       onPointerMove={onPointerMove}
@@ -316,7 +330,7 @@ export function CanvasView({
     >
       <div className="wk-canvas-world" style={{ transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.zoom})` }}>
         {board && (
-          <div className={'wk-board-slot' + (related ? ' is-dim' : '')} style={{ left: board.x, top: board.y, width: board.w, height: board.h }}>
+          <div className={'wk-board-slot' + (active ? ' is-dim' : '')} style={{ left: board.x, top: board.y, width: board.w, height: board.h }}>
             {boardNode}
           </div>
         )}
@@ -330,10 +344,10 @@ export function CanvasView({
               x={p.x}
               y={p.y}
               w={cardSize(it, sizes).w}
-              z={related && inRelated ? 5000 : front.indexOf(it.id) + 1}
-              angle={related && inRelated ? 0 : tilt(it)}
+              z={active && inRelated ? 5000 : front.indexOf(it.id) + 1}
+              angle={active && inRelated ? 0 : tilt(it)}
               dragging={drag?.id === it.id}
-              dim={Boolean(related) && !inRelated}
+              dim={Boolean(active) && !inRelated}
               isNew={highlight === it.id}
               cardProps={cardProps}
               onStartDrag={startCardDrag}
@@ -341,7 +355,22 @@ export function CanvasView({
             />
           )
         })}
+        {!related && clusterGather?.labels.map(l => (
+          <div key={l.key} className="wk-cluster-label" style={{ left: l.x, top: l.y, width: l.w }}>
+            <span className="wk-cluster-name">{l.label}</span><span className="wk-cluster-count">{l.count} 条</span>
+          </div>
+        ))}
       </div>
+
+      {!related && cluster && (
+        <div className="wk-float wk-related-bar">
+          <Icon name="cluster" size={15} />
+          {cluster.groups.length
+            ? <span>汇聚了 <b>{Object.keys(clusterGather?.pos || {}).length}</b> 条灵感{cluster.groups.length > 1 ? `，分成 ${cluster.groups.length} 簇` : ''}</span>
+            : <span>选中的脚本和标签下还没有灵感</span>}
+          <button className="wk-btn-text" onClick={onCloseCluster}>散开 <kbd>Esc</kbd></button>
+        </div>
+      )}
 
       {related && (
         <div className="wk-float wk-related-bar">

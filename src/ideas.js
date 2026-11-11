@@ -4,6 +4,7 @@
 //     id, kind: 'text' | 'image' | 'link' | 'video',
 //     text,                 // 文字内容 / 备注（非文字类可为空）
 //     tags: string[], pinned, archived, createdAt, updatedAt,
+//     script?,              // 隶属的脚本（名称）
 //     done?, doneAt?,       // 已完稿及完稿时间
 //     url?,                 // 链接 / 视频地址 / 网络图片地址
 //     file?: { name, mime, size, w?, h? },   // 上传到 host 的图片或视频
@@ -173,6 +174,8 @@ function build(raw, { id, now }) {
     updatedAt: 0,
   }
   it.updatedAt = cleanNum(raw.updatedAt) ?? it.createdAt
+  const script = cleanStr(raw.script, 40)
+  if (script) it.script = script
   if (raw.done === true) {
     it.done = true
     it.doneAt = cleanNum(raw.doneAt) ?? it.updatedAt
@@ -200,10 +203,10 @@ export function createIdea({ now = Date.now(), ...fields } = {}) {
 }
 
 // 把一段输入（文字或分享文案）变成灵感：含网址时自动识别为链接 / 视频 / 图片。
-export function ideaFromInput({ input, tags, now = Date.now(), pos } = {}) {
+export function ideaFromInput({ input, tags, script, now = Date.now(), pos } = {}) {
   const { url, rest } = extractUrl(input)
-  if (url) return createIdea({ kind: classifyUrl(url), url, text: rest, tags, now, pos })
-  return createIdea({ kind: 'text', text: rest, tags, now, pos })
+  if (url) return createIdea({ kind: classifyUrl(url), url, text: rest, tags, script, now, pos })
+  return createIdea({ kind: 'text', text: rest, tags, script, now, pos })
 }
 
 // 把外部传入（前端 / 旧数据）的灵感清洗成合法结构；不合法返回 null。
@@ -243,7 +246,7 @@ export function sortIdeas(list) {
 
 function haystack(it) {
   const p = it.preview || {}
-  return [it.text, it.url, p.title, p.description, p.site, ...(it.tags || [])].filter(Boolean).join(' ').toLowerCase()
+  return [it.text, it.url, it.script, p.title, p.description, p.site, ...(it.tags || [])].filter(Boolean).join(' ').toLowerCase()
 }
 
 // 过滤：关键词（文字、标签、链接标题等）+ 标签 + 类型 + 是否含归档
@@ -270,6 +273,18 @@ export function collectTags(list) {
   return [...map.entries()]
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+}
+
+// 列出所有用到的脚本及数量，按数量倒序。
+export function collectScripts(list) {
+  const map = new Map()
+  for (const it of list) {
+    if (it.archived || !it.script) continue
+    map.set(it.script, (map.get(it.script) || 0) + 1)
+  }
+  return [...map.entries()]
+    .map(([script, count]) => ({ script, count }))
+    .sort((a, b) => b.count - a.count || a.script.localeCompare(b.script))
 }
 
 // 各类型数量（不含归档）

@@ -703,3 +703,57 @@ body[data-ds-dark-theme] .wk-sync-pill.is-local { color: #fbbf24; }
 @media (prefers-reduced-motion: reduce) {
   .wk-root *, .wk-root *::before, .wk-root *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- 录入框下的「脚本」「标签」小框 ---------- */
+.wk-compose-meta { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.wk-capture .wk-compose-meta .wk-compose-hint { margin: 0 0 0 auto; padding: 4px 10px; font-size: 11.5px; min-height: 0; }
+.wk-picker { position: relative; }
+.wk-picker-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; max-width: 230px; padding: 0 10px;
+  border-radius: 10px; border: 1px solid var(--glass-border); cursor: pointer;
+  background: var(--glass); color: var(--muted); font-size: 12.5px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); box-shadow: var(--shadow-sm);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.wk-picker-btn:hover, .wk-picker-btn.is-open { border-color: var(--accent-ring); color: var(--text); }
+.wk-picker-label { color: var(--text-2); font-weight: 600; }
+.wk-picker-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); }
+.wk-picker-btn.is-set { background: color-mix(in srgb, var(--accent) 10%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--accent); }
+.wk-picker-btn.is-set .wk-picker-value { color: var(--accent); }
+.wk-picker-clear { display: inline-flex; padding: 2px; margin-right: -4px; border-radius: 6px; color: var(--muted); }
+.wk-picker-clear:hover { background: var(--accent-soft); color: var(--text); }
+.wk-picker-pop {
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 30; width: 240px; padding: 8px;
+  border-radius: 14px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-lg);
+  animation: wk-pop .16s var(--ease);
+}
+.wk-picker-input {
+  width: 100%; height: 32px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--border); outline: none;
+  background: var(--surface-2); color: var(--text); font-size: 13px;
+}
+.wk-picker-input:focus { border-color: var(--accent-ring); background: var(--surface); }
+.wk-picker-list { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; max-height: 200px; overflow: auto; }
+.wk-picker-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 30px; padding: 0 9px;
+  border: none; border-radius: 8px; background: none; cursor: pointer; text-align: left;
+  color: var(--text-2); font-size: 13px;
+}
+.wk-picker-opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-picker-opt:hover { background: var(--surface-2); color: var(--text); }
+.wk-picker-opt.is-on { color: var(--accent); }
+.wk-picker-opt.is-new { justify-content: flex-start; color: var(--accent); }
+
+/* 卡片上的脚本 */
+.wk-tag.is-script { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); }
+
+/* ---------- 汇聚 ---------- */
+.wk-pop-note { font-size: 12px; line-height: 1.5; color: var(--muted); padding: 0 2px; }
+.wk-pop-sum { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; }
+.wk-btn-text:disabled { opacity: .4; cursor: default; }
+.wk-cluster-label {
+  position: absolute; display: flex; align-items: baseline; gap: 8px; height: 36px; padding: 0 4px;
+  border-bottom: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  pointer-events: none; animation: wk-pop .3s var(--ease);
+}
+.wk-cluster-name { font-size: 17px; font-weight: 650; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-cluster-count { font-size: 12px; color: var(--faint); white-space: nowrap; }

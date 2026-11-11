@@ -92,10 +92,10 @@ export function useIdeas({ placeRef } = {}) {
   }, [update])
 
   // 文字 / 网址 / 分享文案
-  const addFromInput = useCallback((input, { tags, hint } = {}) => add(ideaFromInput({ input, tags }), hint), [add])
+  const addFromInput = useCallback((input, { tags, script, hint } = {}) => add(ideaFromInput({ input, tags, script }), hint), [add])
 
   // 图片 / 视频文件：先上传再生成灵感。hint 传给 placeRef（如拖放落点）。
-  const addFiles = useCallback(async (fileList, { tags, text, hint } = {}) => {
+  const addFiles = useCallback(async (fileList, { tags, text, script, hint } = {}) => {
     const files = [...fileList].filter(f => /^(image|video)\//.test(f.type))
     const results = await Promise.all(files.map(async (file, i) => {
       const uid = `up_${++uploadSeq}`
@@ -107,7 +107,7 @@ export function useIdeas({ placeRef } = {}) {
           kind === 'image' ? imageSize(file) : null,
         ])
         setUploads(prev => prev.filter(u => u.id !== uid))
-        return add(createIdea({ kind, file: { ...meta, ...(size || {}) }, text, tags }), hint)
+        return add(createIdea({ kind, file: { ...meta, ...(size || {}) }, text, tags, script }), hint)
       } catch (err) {
         setUploads(prev => prev.map(u => u.id === uid ? { ...u, error: err.message } : u))
         return null

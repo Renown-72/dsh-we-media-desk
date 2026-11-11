@@ -98,9 +98,10 @@ function LinkInfo({ idea }) {
 function Editor({ idea, onSave, onCancel }) {
   const [text, setText] = useState(idea.text)
   const [tags, setTags] = useState(idea.tags.map(t => '#' + t).join(' '))
+  const [script, setScript] = useState(idea.script || '')
   function save() {
     if (idea.kind === 'text' && !text.trim()) return onCancel()
-    onSave({ text: text.trim().slice(0, 2000), tags: parseTags(tags) })
+    onSave({ text: text.trim().slice(0, 2000), tags: parseTags(tags), script: script.trim().slice(0, 40) || undefined })
   }
   return (
     <div className="wk-editor">
@@ -112,6 +113,8 @@ function Editor({ idea, onSave, onCancel }) {
           if (e.key === 'Escape') { e.stopPropagation(); onCancel() }
         }} />
       <input className="wk-field" value={tags} placeholder="#标签" onChange={e => setTags(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }} />
+      <input className="wk-field" value={script} placeholder="隶属的脚本（可选）" list="wk-script-options" onChange={e => setScript(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }} />
       <div className="wk-editor-actions">
         <button className="wk-btn-text" onClick={onCancel}>取消</button>
@@ -130,7 +133,7 @@ function ActionBtn({ icon, label, onClick, danger, active }) {
   )
 }
 
-export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive, onDelete, onEdit, onOpenImage, onTag, onRelated, onDone }) {
+export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', handleProps, onPin, onArchive, onDelete, onEdit, onOpenImage, onTag, onScript, onRelated, onDone }) {
   const [editing, setEditing] = useState(false)
   const kind = idea.kind || 'text'
   const isLinkish = (kind === 'link' || kind === 'video') && idea.url && !idea.file && !isDirectMedia(idea.url)
@@ -155,8 +158,13 @@ export const IdeaCard = React.memo(function IdeaCard({ idea, variant = 'feed', h
         ) : idea.text ? (
           <p className={kind === 'text' ? 'wk-card-text is-main' : 'wk-card-text'} onDoubleClick={() => setEditing(true)}>{idea.text}</p>
         ) : null}
-        {!editing && idea.tags.length > 0 && (
+        {!editing && (idea.tags.length > 0 || idea.script) && (
           <div className="wk-card-tags">
+            {idea.script && (
+              <button className="wk-tag is-script" title="把这个脚本的灵感汇聚到一起" onClick={e => { e.stopPropagation(); onScript?.(idea.script) }}>
+                <Icon name="docs" size={11} />{idea.script}
+              </button>
+            )}
             {idea.tags.map(t => <button key={t} className="wk-tag" onClick={e => { e.stopPropagation(); onTag?.(t) }}>#{t}</button>)}
           </div>
         )}

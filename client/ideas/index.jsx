@@ -1,7 +1,7 @@
 // 灵感页：周表（本周概览）+ 画布 / 信息流两种视图，共用一套筛选；
 // 底部 ＋ 打开录入框；记下新灵感或点“相关”时，把相关的旧灵感找出来。
 import React from 'react'
-import { KINDS, sortIdeas, filterIdeas, collectTags, countKinds, splitHashtags } from '../../src/ideas.js'
+import { KINDS, sortIdeas, filterIdeas, collectTags, collectScripts, countKinds, splitHashtags } from '../../src/ideas.js'
 import { useIdeas } from './useIdeas.js'
 import { Composer, mediaFilesOf } from './Composer.jsx'
 import { WeekBoard } from './WeekBoard.jsx'
@@ -10,6 +10,7 @@ import { FeedView } from './FeedView.jsx'
 import { CanvasView } from './CanvasView.jsx'
 import { relatedIdeas } from './related.js'
 import { periodStats } from './stats.js'
+import { clusterGroups, pickLabel } from './cluster.js'
 import { autoPlace, toWorld, cardSize, rectOf, findFreeSpot, boardRect, overlapsBoard, BOARD_SIZE } from './layout.js'
 import { Icon } from '../icons.jsx'
 
@@ -96,6 +97,44 @@ function FilterPanel({ query, setQuery, tags, activeTag, setActiveTag, showArchi
   )
 }
 
+// 汇聚面板：选几个脚本 / 标签，画布上把它们的灵感各聚成一簇
+function GatherPanel({ scripts, tags, picks, onToggle, onClear }) {
+  const on = (type, value) => picks.some(p => p.type === type && p.value === value)
+  return (
+    <div className="wk-popover" onPointerDown={e => e.stopPropagation()}>
+      <div className="wk-pop-note">选几个脚本或标签，画布上会把它们的灵感各聚成一簇；同时属于几个的，聚在它们中间。</div>
+      <div className="wk-pop-section">
+        <div className="wk-pop-title">脚本</div>
+        {scripts.length ? (
+          <div className="wk-pop-tags">
+            {scripts.map(s => (
+              <button key={s.script} className={'wk-chip' + (on('script', s.script) ? ' is-active' : '')} onClick={() => onToggle({ type: 'script', value: s.script })}>
+                <Icon name="docs" size={12} />{s.script}<span className="wk-chip-count">{s.count}</span>
+              </button>
+            ))}
+          </div>
+        ) : <div className="wk-pop-empty">记灵感时在「脚本」小框里选一个，就会出现在这里</div>}
+      </div>
+      <div className="wk-pop-section">
+        <div className="wk-pop-title">标签</div>
+        {tags.length ? (
+          <div className="wk-pop-tags">
+            {tags.map(t => (
+              <button key={t.tag} className={'wk-chip' + (on('tag', t.tag) ? ' is-active' : '')} onClick={() => onToggle({ type: 'tag', value: t.tag })}>
+                #{t.tag}<span className="wk-chip-count">{t.count}</span>
+              </button>
+            ))}
+          </div>
+        ) : <div className="wk-pop-empty">还没有标签</div>}
+      </div>
+      <div className="wk-pop-foot">
+        <span className="wk-pop-sum">{picks.length ? '已选 ' + picks.map(pickLabel).join('、') : '还没选'}</span>
+        <button className="wk-btn-text" onClick={onClear} disabled={!picks.length}>散开</button>
+      </div>
+    </div>
+  )
+}
+
 function Toasts({ uploads, onDismiss }) {
   if (!uploads.length) return null
   return (
@@ -135,6 +174,9 @@ export function IdeasPanel() {
   const [dropping, setDropping] = useState(false)
   const [highlight, setHighlight] = useState('')   // 刚记下的灵感，短暂高亮
   const [related, setRelated] = useState(null)     // { anchorId, ids, label }
+  const [picks, setPicks] = useState([])            // 汇聚：[{ type: 'script' | 'tag', value }]
+  const [gatherOpen, setGatherOpen] = useState(false)
+  const [captureScript, setCaptureScript] = useState('') // 录入框里选的脚本，连续记录时保留
   const [homeTick, setHomeTick] = useState(0)
   const [captureOpen, setCaptureOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
@@ -266,10 +308,10 @@ export function IdeasPanel() {
     setRelated({ anchorId: anchor.id, ids, label: labelOf(anchor) })
   }, [])
 
-  const addText = useCallback((input, tags = [], point) => {
+  const addText = useCallback((input, tags = [], point, script) => {
     // 粘贴、拖入的文字里也可能带 #标签
     const parts = splitHashtags(input)
-    const idea = store.addFromInput(parts.text, { tags: [...tags, ...parts.tags], hint: point && { point } })
+    const idea = store.addFromInput(parts.text, { tags: [...tags, ...parts.tags], script, hint: point && { point } })
     flash(idea.id)
     showRelated(idea)
     return idea
@@ -282,7 +324,7 @@ export function IdeasPanel() {
   }, [store.addFiles, flash])
 
   // ＋ 弹出的录入框：记下后自动收起
-  const onCaptureText = useCallback((text, tags) => { const it = addText(text, tags); setCaptureOpen(false); return it }, [addText])
+  const onCaptureText = useCallback((text, tags, script) => { const it = addText(text, tags, undefined, script); setCaptureOpen(false); return it }, [addText])
   const onCaptureFiles = useCallback((files, opts) => { setCaptureOpen(false); return addFiles(files, opts) }, [addFiles])
   useEffect(() => { if (captureOpen) setTimeout(() => composerRef.current?.focus(), 30) }, [captureOpen])
 
@@ -317,7 +359,9 @@ export function IdeasPanel() {
         else if (detailId) setDetailId('')
         else if (captureOpen) setCaptureOpen(false)
         else if (filterOpen) setFilterOpen(false)
+        else if (gatherOpen) setGatherOpen(false)
         else if (related) setRelated(null)
+        else if (picks.length) setPicks([])
         return
       }
       if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey && !e.altKey && !isEditable(document.activeElement)) {
@@ -333,7 +377,7 @@ export function IdeasPanel() {
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [lightbox, related, filterOpen, captureOpen, detailId])
+  }, [lightbox, related, filterOpen, gatherOpen, picks, captureOpen, detailId])
 
   // 点面板外面时收起
   useEffect(() => {
@@ -342,6 +386,12 @@ export function IdeasPanel() {
     document.addEventListener('pointerdown', close)
     return () => document.removeEventListener('pointerdown', close)
   }, [filterOpen])
+  useEffect(() => {
+    if (!gatherOpen) return
+    const close = e => { if (!e.target.closest('.wk-gather-wrap')) setGatherOpen(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [gatherOpen])
   useEffect(() => {
     if (!captureOpen) return
     const close = e => { if (!e.target.closest('.wk-capture, .wk-fab')) setCaptureOpen(false) }
@@ -376,6 +426,9 @@ export function IdeasPanel() {
 
   const stats = useMemo(() => periodStats(ideas, { offset: weekOffset, unit: boardUnit }), [ideas, weekOffset, boardUnit])
   const tags = useMemo(() => collectTags(ideas), [ideas])
+  const scripts = useMemo(() => collectScripts(ideas), [ideas])
+  const tagNames = useMemo(() => tags.map(t => t.tag), [tags])
+  const scriptNames = useMemo(() => scripts.map(s => s.script), [scripts])
   const kindCounts = useMemo(() => countKinds(ideas), [ideas])
   const visible = useMemo(
     () => sortIdeas(filterIdeas(ideas, { query, tag: activeTag, kinds, includeArchived: showArchived })),
@@ -390,6 +443,15 @@ export function IdeasPanel() {
     const extra = [related.anchorId, ...related.ids].filter(id => !shown.has(id)).map(id => byId.get(id)).filter(Boolean)
     return extra.length ? [...visible, ...extra] : visible
   }, [visible, related, byId])
+
+  // 汇聚：只在画布上生效；和“相关”互斥
+  const cluster = useMemo(() => (mode === 'canvas' && picks.length && !related ? { picks, groups: clusterGroups(canvasItems, picks) } : null), [mode, picks, related, canvasItems])
+  const togglePick = useCallback(p => {
+    setRelated(null)
+    setPicks(prev => (prev.some(x => x.type === p.type && x.value === p.value) ? prev.filter(x => !(x.type === p.type && x.value === p.value)) : [...prev, p]))
+  }, [])
+  const closeCluster = useCallback(() => setPicks([]), [])
+  useEffect(() => { if (mode !== 'canvas') { setPicks([]); setGatherOpen(false) } }, [mode])
 
   const archivedCount = useMemo(() => ideas.filter(i => i.archived).length, [ideas])
   const totalCount = ideas.length - archivedCount
@@ -418,6 +480,10 @@ export function IdeasPanel() {
   const nextWeek = useCallback(() => setWeekOffset(o => Math.min(0, o + 1)), [])
   const thisWeek = useCallback(() => setWeekOffset(0), [])
   const pickTag = useCallback(t => { setActiveTag(t); setFilterOpen(true) }, [])
+  // 卡片上点脚本：画布里把这个脚本的灵感汇聚过来；信息流里按它搜索
+  const pickScript = useCallback(name => {
+    if (modeRef.current === 'canvas') { setRelated(null); setPicks([{ type: 'script', value: name }]) } else setQuery(name)
+  }, [])
 
   // 保持稳定，卡片才能跳过不必要的重绘
   const cardProps = useMemo(() => ({
@@ -427,9 +493,10 @@ export function IdeasPanel() {
     onEdit: store.update,
     onOpenImage: setLightbox,
     onTag: pickTag,
+    onScript: pickScript,
     onRelated,
     onDone: store.toggleDone,
-  }), [store.togglePin, store.toggleArchive, store.remove, store.update, store.toggleDone, onRelated, pickTag])
+  }), [store.togglePin, store.toggleArchive, store.remove, store.update, store.toggleDone, onRelated, pickTag, pickScript])
 
   const boardNode = (
     <WeekBoard
@@ -463,6 +530,8 @@ export function IdeasPanel() {
           onMove={store.move}
           related={related}
           onCloseRelated={closeRelated}
+          cluster={cluster}
+          onCloseCluster={closeCluster}
           highlight={highlight}
           board={hero}
           boardNode={boardNode}
@@ -489,9 +558,19 @@ export function IdeasPanel() {
         </div>
       )}
 
-      {/* 右上：同步状态 + 筛选 */}
+      <datalist id="wk-script-options">{scriptNames.map(n => <option key={n} value={n} />)}</datalist>
+
+      {/* 右上：同步状态 + 汇聚 + 筛选 */}
       <div className="wk-float wk-topright">
         <SyncPill sync={store.sync} />
+        {mode === 'canvas' && (
+          <div className="wk-filter-wrap wk-gather-wrap">
+            <button className={'wk-pill-btn' + (gatherOpen || picks.length ? ' is-on' : '')} onClick={() => { setGatherOpen(v => !v); setFilterOpen(false) }} title="按脚本、标签汇聚">
+              <Icon name="cluster" size={15} />汇聚{picks.length ? <span className="wk-badge">{picks.length}</span> : null}
+            </button>
+            {gatherOpen && <GatherPanel scripts={scripts} tags={tags} picks={picks} onToggle={togglePick} onClear={closeCluster} />}
+          </div>
+        )}
         <div className="wk-filter-wrap">
           <button className={'wk-pill-btn' + (filterOpen || filterCount ? ' is-on' : '')} onClick={() => setFilterOpen(v => !v)} title="筛选（/）">
             <Icon name="sliders" size={15} />筛选{filterCount ? <span className="wk-badge">{filterCount}</span> : null}
@@ -533,7 +612,8 @@ export function IdeasPanel() {
 
       {captureOpen && (
         <div className="wk-capture" role="dialog" aria-label="记下灵感">
-          <Composer ref={composerRef} onText={onCaptureText} onFiles={onCaptureFiles} />
+          <Composer ref={composerRef} onText={onCaptureText} onFiles={onCaptureFiles}
+            scripts={scriptNames} tagOptions={tagNames} script={captureScript} onScript={setCaptureScript} />
         </div>
       )}
 

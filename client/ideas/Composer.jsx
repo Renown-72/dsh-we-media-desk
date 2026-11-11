@@ -1,9 +1,9 @@
-// 录入框：一句话、网址或分享文案；#标签 直接写在文字里；可粘贴或选择图片、视频。
+// 录入框：一句话、网址或分享文案；#标签 可直接写在文字里，也可在下面的「脚本」「标签」小框里选；可粘贴或选择图片、视频。
 import React from 'react'
 import { extractUrl, classifyUrl, splitHashtags, KINDS } from '../../src/ideas.js'
 import { Icon } from '../icons.jsx'
 
-const { useState, useRef, useLayoutEffect, useImperativeHandle, forwardRef } = React
+const { useState, useRef, useEffect, useLayoutEffect, useImperativeHandle, forwardRef } = React
 
 const KIND_LABEL = Object.fromEntries(KINDS.map(k => [k.id, k.label]))
 
@@ -11,8 +11,70 @@ export function mediaFilesOf(dataTransfer) {
   return [...(dataTransfer?.files || [])].filter(f => /^(image|video)\//.test(f.type))
 }
 
-export const Composer = forwardRef(function Composer({ onText, onFiles }, ref) {
+// 小下拉框：可搜索、可新建。multi 时 value 是数组
+function Picker({ icon, label, prefix = '', placeholder, options, value, multi, onChange, emptyText }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const boxRef = useRef(null)
+  const selected = multi ? value : (value ? [value] : [])
+  const term = q.trim().replace(/^[#＃]/, '')
+  const list = options.filter(o => !term || o.toLowerCase().includes(term.toLowerCase()))
+  const canCreate = term && !options.includes(term) && term.length <= 40
+
+  useEffect(() => {
+    if (!open) return
+    const close = e => { if (!boxRef.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+
+  function toggle(v) {
+    if (multi) onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
+    else { onChange(value === v ? '' : v); setOpen(false) }
+    setQ('')
+  }
+
+  return (
+    <div className="wk-picker" ref={boxRef}>
+      <button type="button" className={'wk-picker-btn' + (selected.length ? ' is-set' : '') + (open ? ' is-open' : '')} onClick={() => setOpen(v => !v)}>
+        <Icon name={icon} size={13} />
+        <span className="wk-picker-label">{label}</span>
+        <span className="wk-picker-value">{selected.length ? selected.map(v => prefix + v).join(' ') : placeholder}</span>
+        {selected.length > 0 && (
+          <span className="wk-picker-clear" role="button" aria-label={'清除' + label}
+            onClick={e => { e.stopPropagation(); onChange(multi ? [] : '') }}><Icon name="close" size={11} /></span>
+        )}
+      </button>
+      {open && (
+        <div className="wk-picker-pop">
+          <input className="wk-picker-input" autoFocus value={q} placeholder={'搜索或新建' + label}
+            onChange={e => setQ(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) }
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                if (canCreate) toggle(term)
+                else if (list[0]) toggle(list[0])
+              }
+            }} />
+          <div className="wk-picker-list">
+            {canCreate && <button type="button" className="wk-picker-opt is-new" onClick={() => toggle(term)}><Icon name="plus" size={12} />新建「{prefix}{term}」</button>}
+            {list.map(o => (
+              <button type="button" key={o} className={'wk-picker-opt' + (selected.includes(o) ? ' is-on' : '')} onClick={() => toggle(o)}>
+                <span>{prefix}{o}</span>{selected.includes(o) && <Icon name="check" size={13} stroke={2.4} />}
+              </button>
+            ))}
+            {!list.length && !canCreate && <div className="wk-pop-empty">{emptyText}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export const Composer = forwardRef(function Composer({ onText, onFiles, scripts = [], tagOptions = [], script = '', onScript }, ref) {
   const [draft, setDraft] = useState('')
+  const [picked, setPicked] = useState([])
   const [error, setError] = useState('')
   const areaRef = useRef(null)
   const fileRef = useRef(null)
@@ -27,15 +89,17 @@ export const Composer = forwardRef(function Composer({ onText, onFiles }, ref) {
     el.style.height = Math.min(el.scrollHeight, 6 * 24 + 4) + 'px'
   }, [draft])
 
-  const { text, tags } = splitHashtags(draft)
+  const { text, tags: inlineTags } = splitHashtags(draft)
+  const tags = [...new Set([...picked, ...inlineTags])]
   const { url } = extractUrl(text)
   const detected = url ? classifyUrl(url) : text ? 'text' : ''
 
   function submit() {
-    if (!text && !tags.length) return
+    if (!text && !inlineTags.length) return
     try {
-      onText(text, tags)
+      onText(text, tags, script)
       setDraft('')
+      setPicked([])
       setError('')
     } catch (err) {
       setError(err.message)
@@ -48,14 +112,15 @@ export const Composer = forwardRef(function Composer({ onText, onFiles }, ref) {
     if (!files.length) return
     e.preventDefault()
     e.stopPropagation()
-    onFiles(files, { tags, text })
+    onFiles(files, { tags, text, script })
     setDraft('')
+    setPicked([])
   }
 
   function onPick(e) {
     const files = [...e.target.files]
     e.target.value = ''
-    if (files.length) { onFiles(files, { tags, text }); setDraft('') }
+    if (files.length) { onFiles(files, { tags, text, script }); setDraft(''); setPicked([]) }
   }
 
   return (
@@ -67,7 +132,7 @@ export const Composer = forwardRef(function Composer({ onText, onFiles }, ref) {
           className="wk-compose-input"
           value={draft}
           rows={1}
-          placeholder="记下一个灵感，或贴一个链接…"
+          placeholder="记下一个灵感，或贴一个链接… 也可以写 #标签"
           onChange={e => { setDraft(e.target.value); if (error) setError('') }}
           onPaste={onPaste}
           onKeyDown={e => {
@@ -77,21 +142,25 @@ export const Composer = forwardRef(function Composer({ onText, onFiles }, ref) {
         <button className="wk-icon-btn" title="添加图片或视频" onClick={() => fileRef.current?.click()}>
           <Icon name="attach" size={17} />
         </button>
-        <button className="wk-send" title="记下（Enter）" disabled={!text && !tags.length} onClick={submit}>
+        <button className="wk-send" title="记下（Enter）" disabled={!text && !inlineTags.length} onClick={submit}>
           <Icon name="arrowUp" size={16} stroke={2.2} />
         </button>
         <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={onPick} />
       </div>
-      <div className="wk-compose-hint">
-        {error ? <span className="wk-error">{error}</span> : draft ? (
-          <>
-            {detected && <span className="wk-hint-kind">存为{KIND_LABEL[detected]}</span>}
-            {tags.map(t => <span key={t} className="wk-hint-tag">#{t}</span>)}
-            <span className="wk-hint-keys">Enter 记下 · Shift+Enter 换行</span>
-          </>
-        ) : (
-          <span>用 #标签 归类 · 图片、视频可以直接粘贴或拖进来</span>
-        )}
+      <div className="wk-compose-meta">
+        <Picker icon="docs" label="脚本" placeholder="未选" value={script} onChange={v => onScript?.(v)}
+          options={scripts} emptyText="还没有脚本，输入名字新建一个" />
+        <Picker icon="hash" label="标签" prefix="#" placeholder="未选" value={picked} multi onChange={setPicked}
+          options={[...new Set([...tagOptions, ...picked])]} emptyText="还没有标签，输入名字新建一个" />
+        {(error || draft) && <div className="wk-compose-hint">
+          {error ? <span className="wk-error">{error}</span> : draft ? (
+            <>
+              {detected && <span className="wk-hint-kind">存为{KIND_LABEL[detected]}</span>}
+              {inlineTags.filter(t => !picked.includes(t)).map(t => <span key={t} className="wk-hint-tag">#{t}</span>)}
+              <span className="wk-hint-keys">Enter 记下</span>
+            </>
+          ) : null}
+        </div>}
       </div>
     </div>
   )

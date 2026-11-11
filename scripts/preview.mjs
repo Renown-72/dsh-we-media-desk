@@ -80,16 +80,16 @@ function sampleIdeas(base) {
   const img = (n, w, h, extra) => ({ kind: 'image', file: { name: n, mime: 'image/png', size: 1, w, h }, ...extra })
   const list = [
     { kind: 'text', text: '“最好的选题，往往藏在你反复抱怨的那件小事里。”', tags: ['金句'], createdAt: now - 0.5 * H },
-    img('f_sample0001.png', 720, 900, { text: '傍晚的颜色可以做封面底图', tags: ['封面', '配色'], createdAt: now - 1.2 * H }),
-    { kind: 'video', url: 'https://www.bilibili.com/video/BV1example', text: '开头 3 秒的节奏可以学', tags: ['剪辑'], createdAt: now - 2 * H,
+    img('f_sample0001.png', 720, 900, { text: '傍晚的颜色可以做封面底图', tags: ['封面', '配色'], script: '城市夜景 vlog', createdAt: now - 1.2 * H }),
+    { kind: 'video', url: 'https://www.bilibili.com/video/BV1example', text: '开头 3 秒的节奏可以学', tags: ['剪辑'], script: '城市夜景 vlog', createdAt: now - 2 * H,
       preview: { title: '一镜到底拍城市夜景，手机也能做到', description: '用最普通的设备，拍出电影感的夜景运镜', image: `${base}/we-media-desk/files/f_sample0005.png`, site: '哔哩哔哩' } },
-    { kind: 'text', text: '选题：普通人如何用 AI agent 管理每天的待办，做一期实测对比', tags: ['AI', '选题'], createdAt: now - 3 * H, done: true, doneAt: now - 1 * H },
+    { kind: 'text', text: '选题：普通人如何用 AI agent 管理每天的待办，做一期实测对比', tags: ['AI', '选题'], script: 'AI 待办实测', createdAt: now - 3 * H, done: true, doneAt: now - 1 * H },
     { kind: 'link', url: 'https://sspai.com/post/example', text: '', tags: ['效率'], createdAt: now - 26 * H,
       preview: { title: '我的数字笔记系统：从收集到输出的完整流程', description: '把零散的灵感变成可以发布的内容，需要的不只是一个好用的工具。', image: `${base}/we-media-desk/files/f_sample0006.png`, site: '少数派' } },
     img('f_sample0002.png', 960, 640, { text: '', tags: ['配色'], createdAt: now - 28 * H }),
-    { kind: 'text', text: '周末去探店：这家咖啡馆的光线很适合拍 vlog，下午三点最好', tags: ['探店', 'vlog'], createdAt: now - 30 * H, done: true, doneAt: now - 20 * H },
+    { kind: 'text', text: '周末去探店：这家咖啡馆的光线很适合拍 vlog，下午三点最好', tags: ['探店', 'vlog'], script: '城市夜景 vlog', createdAt: now - 30 * H, done: true, doneAt: now - 20 * H },
     img('f_sample0003.png', 800, 800, { text: '极简构图参考', tags: [], createdAt: now - 2 * D }),
-    { kind: 'link', url: 'https://github.com/example/agent', text: '可以拿来做 AI agent 教程的素材', tags: ['AI'], createdAt: now - 2.2 * D,
+    { kind: 'link', url: 'https://github.com/example/agent', text: '可以拿来做 AI agent 教程的素材', tags: ['AI'], script: 'AI 待办实测', createdAt: now - 2.2 * D,
       preview: { title: 'example/agent: A tiny agent framework', description: 'Build small, reliable agents with tools and memory.', image: '', site: 'GitHub' } },
     { kind: 'text', text: '系列想法：「30 天每天记一个灵感」挑战，最后一期回顾哪些真的做成了内容', tags: ['选题'], createdAt: now - 3 * D, pinned: true },
     img('f_sample0004.png', 640, 960, { text: '竖版海报的留白', tags: ['封面'], createdAt: now - 4 * D }),
@@ -183,7 +183,7 @@ if (serveOnly) {
     ['canvas-light.png', '?fresh=1&mode=canvas'],
     ['canvas-dark.png', '?fresh=1&mode=canvas&dark=1'],
     ['feed-light.png', '?fresh=1&mode=feed'],
-    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1'], ['month-light.png', '?fresh=1&mode=canvas&unit=month'], ['month-dark.png', '?fresh=1&mode=canvas&unit=month&dark=1']] : []),
+    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1'], ['month-light.png', '?fresh=1&mode=canvas&unit=month'], ['month-dark.png', '?fresh=1&mode=canvas&unit=month&dark=1'], ['gather.png', '?fresh=1&mode=canvas&gather=1'], ['picker.png', '?fresh=1&mode=canvas&capture=1&picker=1']] : []),
   ]
   for (const [name, q] of jobs) {
     await seed(base) // 每张图都从同一份示例数据开始
