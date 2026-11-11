@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { weekStats, weekStart, periodOf, formatDuration } from '../client/ideas/stats.js'
+import { weekStats, weekStart, monthStart, periodStats, periodOf, formatDuration } from '../client/ideas/stats.js'
 import { splitHashtags } from '../src/ideas.js'
 
 const at = (m, d, h = 12, min = 0) => new Date(2026, m - 1, d, h, min).getTime()
@@ -74,4 +74,28 @@ test('splitHashtags 取出标签，网址里的 # 不动', () => {
   assert.deepEqual(splitHashtags('#灵感 看 https://a.com/p#section'), { text: '看 https://a.com/p#section', tags: ['灵感'] })
   assert.deepEqual(splitHashtags('没有标签'), { text: '没有标签', tags: [] })
   assert.deepEqual(splitHashtags('＃标签 后面'), { text: '后面', tags: ['标签'] })
+})
+
+test('periodStats 按月统计：整月的天数、月历前的空格、和上个月比较', () => {
+  const now = at(11, 12, 18)
+  assert.equal(monthStart(now), at(11, 1, 0))
+  assert.equal(monthStart(now, -1), at(10, 1, 0))
+  assert.equal(monthStart(at(1, 15), -1), new Date(2025, 11, 1).getTime())
+  const ideas = [
+    { id: 'a', kind: 'text', tags: [], createdAt: at(11, 1, 9) },
+    { id: 'b', kind: 'text', tags: [], createdAt: at(11, 30, 22), done: true, doneAt: at(11, 30, 23) },
+    { id: 'c', kind: 'text', tags: [], createdAt: at(10, 31, 23) },
+  ]
+  const m = periodStats(ideas, { now, unit: 'month' })
+  assert.equal(m.unit, 'month')
+  assert.equal(m.days.length, 30)
+  assert.equal(m.lead, 6) // 2026-11-01 是周日
+  assert.equal(m.days[0].label, '周日')
+  assert.equal(m.total, 2)
+  assert.equal(m.prevTotal, 1)
+  assert.equal(m.elapsedDays, 12)
+  assert.equal(m.range, '2026 年 11 月')
+  assert.equal(m.fastest.label, '1 小时')
+  assert.equal(periodStats(ideas, { now, unit: 'month', offset: -1 }).days.length, 31)
+  assert.equal(weekStats(ideas, { now }).days.length, 7)
 })

@@ -183,7 +183,7 @@ if (serveOnly) {
     ['canvas-light.png', '?fresh=1&mode=canvas'],
     ['canvas-dark.png', '?fresh=1&mode=canvas&dark=1'],
     ['feed-light.png', '?fresh=1&mode=feed'],
-    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1']] : []),
+    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1'], ['month-light.png', '?fresh=1&mode=canvas&unit=month'], ['month-dark.png', '?fresh=1&mode=canvas&unit=month&dark=1']] : []),
   ]
   for (const [name, q] of jobs) {
     await seed(base) // 每张图都从同一份示例数据开始

@@ -9,7 +9,7 @@ import { IdeaCard } from './IdeaCard.jsx'
 import { FeedView } from './FeedView.jsx'
 import { CanvasView } from './CanvasView.jsx'
 import { relatedIdeas } from './related.js'
-import { weekStats } from './stats.js'
+import { periodStats } from './stats.js'
 import { autoPlace, toWorld, cardSize, rectOf, findFreeSpot, boardRect, overlapsBoard, BOARD_SIZE } from './layout.js'
 import { Icon } from '../icons.jsx'
 
@@ -137,6 +137,14 @@ export function IdeasPanel() {
   const [homeTick, setHomeTick] = useState(0)
   const [captureOpen, setCaptureOpen] = useState(false)
   const [weekOffset, setWeekOffset] = useState(0)
+  const [boardUnit, setBoardUnit] = useState(() => {
+    try { return localStorage.getItem('we-media-desk:board-unit') === 'month' ? 'month' : 'week' } catch { return 'week' }
+  })
+  const changeUnit = useCallback(u => {
+    setBoardUnit(u)
+    setWeekOffset(0)
+    try { localStorage.setItem('we-media-desk:board-unit', u) } catch { /* ignore */ }
+  }, [])
   const [detailId, setDetailId] = useState('')      // 信息流里从周表点开的灵感
   const [focus, setFocus] = useState(null)           // 画布上要飞过去的卡片 { id, n }
   const composerRef = useRef(null)
@@ -352,7 +360,7 @@ export function IdeasPanel() {
     if (text) { try { addText(text.trim(), [], point) } catch { /* ignore */ } }
   }
 
-  const stats = useMemo(() => weekStats(ideas, { offset: weekOffset }), [ideas, weekOffset])
+  const stats = useMemo(() => periodStats(ideas, { offset: weekOffset, unit: boardUnit }), [ideas, weekOffset, boardUnit])
   const tags = useMemo(() => collectTags(ideas), [ideas])
   const kindCounts = useMemo(() => countKinds(ideas), [ideas])
   const visible = useMemo(
@@ -415,6 +423,7 @@ export function IdeasPanel() {
       onPrev={prevWeek}
       onNext={nextWeek}
       onThisWeek={thisWeek}
+      onUnit={changeUnit}
       onOpenIdea={openIdea}
     />
   )

@@ -1,4 +1,4 @@
-// 周表数据（纯函数）：某一周的每日灵感、活跃天数、高峰时段、完稿数、最快完稿、常用标签、各时段分布。
+// 周表 / 月表数据（纯函数）：某一周或某个月的每日灵感、活跃天数、高峰时段、完稿数、最快完稿、常用标签、各时段分布。
 
 const DAY = 86400000
 export const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
@@ -9,6 +9,12 @@ export function weekStart(now = Date.now(), offset = 0) {
   d.setHours(0, 0, 0, 0)
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7)
   return d.getTime()
+}
+
+// 某个时刻所在月份的 1 号 0 点；offset 为相对月数（-1 上个月）
+export function monthStart(now = Date.now(), offset = 0) {
+  const d = new Date(now)
+  return new Date(d.getFullYear(), d.getMonth() + offset, 1).getTime()
 }
 
 // 下一个日历日的 0 点（用 setDate，避开夏令时的 23/25 小时）
@@ -51,21 +57,28 @@ function topOf(map) {
   return best
 }
 
-export function weekStats(ideas, { now = Date.now(), offset = 0 } = {}) {
+export function weekStats(ideas, opts = {}) {
+  return periodStats(ideas, { ...opts, unit: 'week' })
+}
+
+// unit: 'week' | 'month'
+export function periodStats(ideas, { now = Date.now(), offset = 0, unit = 'week' } = {}) {
   const live = ideas.filter(it => !it.archived)
-  const start = weekStart(now, offset)
-  const end = addDays(start, 7)
-  const prevStart = addDays(start, -7)
+  const month = unit === 'month'
+  const start = month ? monthStart(now, offset) : weekStart(now, offset)
+  const end = month ? monthStart(now, offset + 1) : addDays(start, 7)
+  const prevStart = month ? monthStart(now, offset - 1) : addDays(start, -7)
+  const dayCount = Math.round((end - start) / DAY)
   const today = new Date(now).toDateString()
 
   const inWeek = live.filter(it => it.createdAt >= start && it.createdAt < end).sort((a, b) => a.createdAt - b.createdAt)
 
-  const days = WEEKDAYS.map((label, i) => {
+  const days = Array.from({ length: dayCount }, (_, i) => {
     const d0 = addDays(start, i)
     const d1 = addDays(start, i + 1)
     const d = new Date(d0)
     return {
-      key: d0, label, month: d.getMonth() + 1, date: d.getDate(),
+      key: d0, label: WEEKDAYS[(d.getDay() + 6) % 7], month: d.getMonth() + 1, date: d.getDate(),
       today: d.toDateString() === today,
       future: d0 > now,
       items: inWeek.filter(it => it.createdAt >= d0 && it.createdAt < d1),
@@ -94,11 +107,13 @@ export function weekStats(ideas, { now = Date.now(), offset = 0 } = {}) {
   const clock = it => { const d = new Date(it.createdAt); return d.getHours() * 60 + d.getMinutes() }
   const earliest = inWeek.length ? inWeek.reduce((a, b) => (clock(b) < clock(a) ? b : a)) : null
   const latest = inWeek.length ? inWeek.reduce((a, b) => (clock(b) > clock(a) ? b : a)) : null
-  const dayName = it => WEEKDAYS[(new Date(it.createdAt).getDay() + 6) % 7]
+  const dayName = it => { const d = new Date(it.createdAt); return month ? `${d.getMonth() + 1} 月 ${d.getDate()} 日` : WEEKDAYS[(d.getDay() + 6) % 7] }
 
+  const s0 = new Date(start)
   return {
-    start, end,
-    range: `${new Date(start).getMonth() + 1} 月 ${new Date(start).getDate()} 日 – ${new Date(end - 1).getMonth() + 1} 月 ${new Date(end - 1).getDate()} 日`,
+    unit, start, end,
+    lead: (s0.getDay() + 6) % 7, // 第一天是周几（0 = 周一），月历前面空几格
+    range: month ? `${s0.getFullYear()} 年 ${s0.getMonth() + 1} 月` : `${new Date(start).getMonth() + 1} 月 ${new Date(start).getDate()} 日 – ${new Date(end - 1).getMonth() + 1} 月 ${new Date(end - 1).getDate()} 日`,
     isCurrent: offset === 0,
     days,
     total: inWeek.length,
