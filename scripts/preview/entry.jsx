@@ -9,6 +9,7 @@ if (q.get('dark') === '1') document.body.setAttribute('data-ds-dark-theme', '')
 if (q.get('fresh') === '1') localStorage.clear()
 if (q.get('mode')) localStorage.setItem('we-media-desk:ideas-mode', JSON.stringify(q.get('mode')))
 if (q.get('unit')) localStorage.setItem('we-media-desk:board-unit', q.get('unit'))
+if (q.get('open')) sessionStorage.setItem('we-media-desk:script-open', q.get('open'))
 if (q.get('tab')) localStorage.setItem('we-media-desk:tab', q.get('tab'))
 
 createRoot(document.getElementById('root')).render(<App />)

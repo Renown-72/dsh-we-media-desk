@@ -6,6 +6,7 @@
 //     body,                 // 正文
 //     createdAt, updatedAt,
 //     doneAt?,              // 改成「完成」的时间
+//     date?, time?,         // 排期：'2026-11-12'、'19:30'
 //   }
 
 export const SCRIPT_STATUSES = [
@@ -43,6 +44,10 @@ function build(raw, { id, now }) {
   }
   s.updatedAt = cleanNum(raw.updatedAt) ?? s.createdAt
   if (s.status === 'done') s.doneAt = cleanNum(raw.doneAt) ?? s.updatedAt
+  if (isDateKey(raw.date)) {
+    s.date = raw.date
+    if (typeof raw.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw.time)) s.time = raw.time
+  }
   return s
 }
 
@@ -114,3 +119,72 @@ export function filterScripts(list, { status = '', query = '' } = {}) {
 }
 
 export const SCRIPT_TEMPLATE = '【开头 · 前 3 秒的钩子】\n\n\n【正文】\n1. \n2. \n3. \n\n【结尾 · 引导互动】\n'
+
+// ---- 排期 ----
+
+const pad = n => String(n).padStart(2, '0')
+
+export function isDateKey(v) {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
+  const [y, m, d] = v.split('-').map(Number)
+  const t = new Date(y, m - 1, d)
+  return t.getFullYear() === y && t.getMonth() === m - 1 && t.getDate() === d
+}
+
+// 本地日期的 'YYYY-MM-DD'
+export function dateKey(ts = Date.now()) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+// 某月的月历：周一开头，补齐前后几天，返回若干周，每周 7 天
+export function monthGrid(year, month, now = Date.now()) {
+  const first = new Date(year, month, 1)
+  const lead = (first.getDay() + 6) % 7
+  const days = new Date(year, month + 1, 0).getDate()
+  const weeks = Math.ceil((lead + days) / 7)
+  const today = dateKey(now)
+  const out = []
+  for (let w = 0; w < weeks; w++) {
+    const row = []
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(year, month, 1 - lead + w * 7 + i)
+      const key = dateKey(d.getTime())
+      row.push({ key, date: d.getDate(), inMonth: d.getMonth() === month, today: key === today, past: key < today })
+    }
+    out.push(row)
+  }
+  return out
+}
+
+// 顶部的几个数：连续记录天数（到今天，今天还没记就从昨天算）、本月灵感、本月排期、本月完成
+export function scheduleStats(ideas, scripts, { year, month, now = Date.now() } = {}) {
+  const days = new Set(ideas.filter(it => !it.archived).map(it => dateKey(it.createdAt)))
+  let streak = 0
+  const d = new Date(now)
+  if (!days.has(dateKey(d.getTime()))) d.setDate(d.getDate() - 1)
+  while (days.has(dateKey(d.getTime()))) { streak++; d.setDate(d.getDate() - 1) }
+  const prefix = `${year}-${pad(month + 1)}-`
+  return {
+    streak,
+    monthIdeas: ideas.filter(it => !it.archived && dateKey(it.createdAt).startsWith(prefix)).length,
+    monthScheduled: scripts.filter(s => s.date?.startsWith(prefix)).length,
+    monthDone: scripts.filter(s => s.status === 'done' && s.doneAt && dateKey(s.doneAt).startsWith(prefix)).length,
+  }
+}
+
+// 按日期分组排好的脚本：同一天按时间，没时间的排后面
+export function scriptsByDate(scripts) {
+  const map = {}
+  for (const s of scripts) if (s.date) (map[s.date] ||= []).push(s)
+  for (const k in map) map[k].sort((a, b) => (a.time || '99') .localeCompare(b.time || '99') || a.createdAt - b.createdAt)
+  return map
+}
+
+// 从一条灵感起一个脚本标题：取第一行，太长截断，重名加序号
+export function titleFromIdea(idea, scripts = []) {
+  const raw = (idea.text || idea.preview?.title || '').split('\n').find(l => l.trim()) || ''
+  let t = cleanTitle(raw.replace(/^[\s"“「【]+|[\s"”」】]+$/g, ''))
+  if (t.length > 24) t = t.slice(0, 24) + '…'
+  return uniqueTitle(scripts, t || '未命名脚本')
+}

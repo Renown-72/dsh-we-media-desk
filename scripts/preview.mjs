@@ -103,11 +103,12 @@ function sampleIdeas(base) {
 
 function sampleScripts() {
   const now = Date.now()
+  const dk = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
   return [
-    { id: 's_demo1', title: '城市夜景 vlog', status: 'write', createdAt: now - 3 * 864e5, updatedAt: now - 2 * 36e5,
+    { id: 's_demo1', title: '城市夜景 vlog', status: 'write', date: dk(now + 864e5), time: '19:30', createdAt: now - 3 * 864e5, updatedAt: now - 2 * 36e5,
       body: '【开头 · 前 3 秒的钩子】\n一部手机，一条街，拍出电影感的夜景。\n\n【正文】\n1. 选在傍晚蓝调时刻出门，天还没全黑\n2. 找有灯牌和积水的街道，反光是氛围的一半\n3. ' },
     { id: 's_demo2', title: 'AI 待办实测', status: 'shoot', createdAt: now - 5 * 864e5, updatedAt: now - 26 * 36e5, body: '' },
-    { id: 's_demo3', title: '便利店冷萃横评', status: 'done', createdAt: now - 9 * 864e5, updatedAt: now - 4 * 864e5, doneAt: now - 4 * 864e5, body: '七款冷萃，按价格和口感打分。' },
+    { id: 's_demo3', title: '便利店冷萃横评', status: 'done', date: dk(now - 4 * 864e5), createdAt: now - 9 * 864e5, updatedAt: now - 4 * 864e5, doneAt: now - 4 * 864e5, body: '七款冷萃，按价格和口感打分。' },
   ]
 }
 
@@ -193,7 +194,7 @@ if (serveOnly) {
     ['canvas-light.png', '?fresh=1&mode=canvas'],
     ['canvas-dark.png', '?fresh=1&mode=canvas&dark=1'],
     ['feed-light.png', '?fresh=1&mode=feed'],
-    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1'], ['month-light.png', '?fresh=1&mode=canvas&unit=month'], ['month-dark.png', '?fresh=1&mode=canvas&unit=month&dark=1'], ['gather.png', '?fresh=1&mode=canvas&gather=1'], ['picker.png', '?fresh=1&mode=canvas&capture=1&picker=1'], ['scripts-light.png', '?fresh=1&tab=scripts'], ['scripts-dark.png', '?fresh=1&tab=scripts&dark=1']] : []),
+    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1'], ['month-light.png', '?fresh=1&mode=canvas&unit=month'], ['month-dark.png', '?fresh=1&mode=canvas&unit=month&dark=1'], ['gather.png', '?fresh=1&mode=canvas&gather=1'], ['picker.png', '?fresh=1&mode=canvas&capture=1&picker=1'], ['schedule-light.png', '?fresh=1&tab=schedule'], ['schedule-dark.png', '?fresh=1&tab=schedule&dark=1'], ['script-edit.png', '?fresh=1&tab=schedule&open=s_demo1']] : []),
   ]
   for (const [name, q] of jobs) {
     await seed(base) // 每张图都从同一份示例数据开始
