@@ -15,6 +15,7 @@ export function emptyState() {
   return {
     version: 1,
     ideas: [],       // 灵感
+    scripts: [],     // 脚本
     contents: [],    // 内容（成稿）
     schedule: [],    // 排期
     styles: [],      // 风格

@@ -11,6 +11,7 @@
 //   GET  /we-media-desk/preview?url=   链接预览 { ok, preview }
 import { Store, DATA_DIR_NAME, defaultDataDir } from './store.js'
 import { normalizeIdeas } from './ideas.js'
+import { normalizeScripts } from './scripts.js'
 import { FileStore } from './files.js'
 import { fetchPreview } from './preview.js'
 
@@ -111,6 +112,21 @@ export function createHandler({ ctx, store, files = new FileStore(store.dir), pr
         const ideas = normalizeIdeas(body.ideas)
         await store.update(s => { s.ideas = ideas })
         return json(res, 200, { ok: true, count: ideas.length })
+      }
+      throw httpError(405, 'method not allowed')
+    }
+
+    if (path === '/scripts') {
+      if (method === 'GET') {
+        const state = await store.read()
+        return json(res, 200, { ok: true, scripts: normalizeScripts(state.scripts) })
+      }
+      if (method === 'PUT') {
+        const body = await readJson(req)
+        if (!Array.isArray(body.scripts)) throw httpError(400, 'scripts 必须是数组')
+        const scripts = normalizeScripts(body.scripts)
+        await store.update(s => { s.scripts = scripts })
+        return json(res, 200, { ok: true, count: scripts.length })
       }
       throw httpError(405, 'method not allowed')
     }

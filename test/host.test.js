@@ -131,3 +131,11 @@ test('preview 接口把 url 交给预览函数', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('scripts：PUT 后 GET 读回，非法项被清洗', () => withServer(async base => {
+  const r = await put(base + '/scripts', { scripts: [{ id: 'a', title: '城市夜景', status: 'write', body: '开头' }, { id: 'b', title: '' }] })
+  assert.equal(r.status, 200)
+  const got = await (await fetch(base + '/scripts')).json()
+  assert.deepEqual(got.scripts.map(s => [s.id, s.title, s.status, s.body]), [['a', '城市夜景', 'write', '开头']])
+  assert.equal((await put(base + '/scripts', { scripts: 'x' })).status, 400)
+}))

@@ -4,13 +4,14 @@
 import React from 'react'
 import styles from './styles.css'
 import { IdeasPanel } from './ideas/index.jsx'
+import { ScriptsPanel } from './scripts/index.jsx'
 import { Icon } from './icons.jsx'
 
 const { useState } = React
 
 const TABS = [
   { id: 'ideas', label: '灵感', icon: 'lightbulb' },
-  { id: 'contents', label: '内容', icon: 'docs', soon: '把灵感变成脚本、标题和封面，草稿到发布一目了然。' },
+  { id: 'scripts', label: '脚本', icon: 'docs' },
   { id: 'schedule', label: '排期', icon: 'calendar', soon: '把做好的内容拖到日历上，哪天发什么清清楚楚。' },
   { id: 'review', label: '复盘', icon: 'chart', soon: '记下每条内容的数据，看看什么最受欢迎。' },
   { id: 'style', label: '风格', icon: 'palette', soon: '沉淀你的写作风格，让成稿更像你。' },
@@ -31,8 +32,17 @@ function ComingSoon({ tab }) {
 
 export function App() {
   const [tab, setTab] = useState(() => {
-    try { return localStorage.getItem('we-media-desk:tab') || 'ideas' } catch { return 'ideas' }
+    try {
+      const t = localStorage.getItem('we-media-desk:tab') || 'ideas'
+      return t === 'contents' ? 'scripts' : t // 旧版的「内容」页改名为「脚本」
+    } catch { return 'ideas' }
   })
+  // 从脚本页跳到灵感页，并在画布上汇聚这个脚本的灵感
+  const [gatherRequest, setGatherRequest] = useState(null)
+  const gatherScript = React.useCallback(name => {
+    setGatherRequest({ picks: [{ type: 'script', value: name }], n: Date.now() })
+    pick('ideas')
+  }, [])
   const current = TABS.find(t => t.id === tab) || TABS[0]
   function pick(id) {
     setTab(id)
@@ -53,7 +63,9 @@ export function App() {
         ))}
       </nav>
       <main className="wk-main">
-        {current.id === 'ideas' ? <IdeasPanel /> : <ComingSoon tab={current} />}
+        {current.id === 'ideas' ? <IdeasPanel gatherRequest={gatherRequest} />
+          : current.id === 'scripts' ? <ScriptsPanel onGather={gatherScript} />
+          : <ComingSoon tab={current} />}
       </main>
     </div>
   )

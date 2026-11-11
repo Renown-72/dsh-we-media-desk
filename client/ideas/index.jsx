@@ -13,6 +13,7 @@ import { periodStats } from './stats.js'
 import { clusterGroups, pickLabel } from './cluster.js'
 import { autoPlace, toWorld, cardSize, rectOf, findFreeSpot, boardRect, overlapsBoard, BOARD_SIZE } from './layout.js'
 import { Icon } from '../icons.jsx'
+import { loadScripts } from '../storage.js'
 
 const { useState, useMemo, useEffect, useRef, useCallback } = React
 
@@ -157,7 +158,7 @@ function Toasts({ uploads, onDismiss }) {
 
 // ---- 灵感页 ----
 
-export function IdeasPanel() {
+export function IdeasPanel({ gatherRequest } = {}) {
   const placeRef = useRef(null)
   const store = useIdeas({ placeRef })
   const { ideas } = store
@@ -428,7 +429,9 @@ export function IdeasPanel() {
   const tags = useMemo(() => collectTags(ideas), [ideas])
   const scripts = useMemo(() => collectScripts(ideas), [ideas])
   const tagNames = useMemo(() => tags.map(t => t.tag), [tags])
-  const scriptNames = useMemo(() => scripts.map(s => s.script), [scripts])
+  // 录入框的脚本选项：灵感里用到的 + 脚本页建过的
+  const savedScripts = useMemo(() => (loadScripts() || []).map(s => s.title).filter(Boolean), [])
+  const scriptNames = useMemo(() => [...new Set([...scripts.map(s => s.script), ...savedScripts])], [scripts, savedScripts])
   const kindCounts = useMemo(() => countKinds(ideas), [ideas])
   const visible = useMemo(
     () => sortIdeas(filterIdeas(ideas, { query, tag: activeTag, kinds, includeArchived: showArchived })),
@@ -452,6 +455,15 @@ export function IdeasPanel() {
   }, [])
   const closeCluster = useCallback(() => setPicks([]), [])
   useEffect(() => { if (mode !== 'canvas') { setPicks([]); setGatherOpen(false) } }, [mode])
+  // 脚本页点「在画布里看」：切到画布，汇聚这个脚本的灵感
+  const handledGather = useRef(0)
+  useEffect(() => {
+    if (!gatherRequest || handledGather.current === gatherRequest.n) return
+    handledGather.current = gatherRequest.n
+    setMode('canvas')
+    setRelated(null)
+    setTimeout(() => setPicks(gatherRequest.picks), 0)
+  }, [gatherRequest])
 
   const archivedCount = useMemo(() => ideas.filter(i => i.archived).length, [ideas])
   const totalCount = ideas.length - archivedCount

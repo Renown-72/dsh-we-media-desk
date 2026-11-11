@@ -71,6 +71,44 @@ export const hostBridge = {
   },
 }
 
+// ---- 脚本 ----
+
+const SCRIPTS_KEY = 'we-media-desk:scripts'
+const SCRIPTS_API = '/we-media-desk/scripts'
+
+export function loadScripts() {
+  if (!hasLocalStorage()) return null
+  try {
+    const data = JSON.parse(localStorage.getItem(SCRIPTS_KEY) || 'null')
+    return Array.isArray(data) ? data : null
+  } catch {
+    return null
+  }
+}
+
+export function saveScripts(scripts) {
+  if (!hasLocalStorage()) return false
+  try { localStorage.setItem(SCRIPTS_KEY, JSON.stringify(scripts)); return true } catch { return false }
+}
+
+let scriptChain = Promise.resolve()
+export const scriptsBridge = {
+  async load() {
+    const body = await request(SCRIPTS_API)
+    if (!Array.isArray(body.scripts)) throw new Error('host 返回的数据格式不对')
+    return body.scripts
+  },
+  save(scripts) {
+    const run = scriptChain.then(() => request(SCRIPTS_API, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scripts }),
+    }))
+    scriptChain = run.catch(() => {})
+    return run
+  },
+}
+
 // ---- 附件与链接预览 ----
 
 const API = '/we-media-desk'
