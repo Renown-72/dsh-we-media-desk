@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseTags, createIdea, sortIdeas, filterIdeas, collectTags } from '../src/ideas.js'
+import { parseTags, createIdea, sortIdeas, filterIdeas, collectTags , toLocalInput, fromLocalInput } from '../src/ideas.js'
 
 test('parseTags 去 #、去重、限制数量', () => {
   assert.deepEqual(parseTags('#美食 #旅行'), ['美食', '旅行'])
@@ -154,4 +154,13 @@ test('normalizeIdea 保留完稿状态并补完稿时间', () => {
   const no = normalizeIdea({ id: 'n', text: 'x', done: 'yes', doneAt: 5 })
   assert.equal(no.done, undefined)
   assert.equal(no.doneAt, undefined)
+})
+
+test('toLocalInput / fromLocalInput：补记时间', () => {
+  const t = new Date(2026, 10, 9, 21, 30).getTime()
+  assert.equal(toLocalInput(t), '2026-11-09T21:30')
+  assert.equal(fromLocalInput('2026-11-09T21:30', t + 1e9), t)
+  assert.equal(fromLocalInput('2026-11-09T21:30', t - 1000), t - 1000) // 不能晚于现在
+  assert.equal(fromLocalInput('2026-02-30T10:00'), null)
+  assert.equal(fromLocalInput(''), null)
 })

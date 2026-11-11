@@ -33,3 +33,8 @@ if (q.get('picker') === '1') (async () => {
   await wait(200); document.querySelectorAll('.wk-picker-btn')[1]?.click()
   await wait(200); clickText('.wk-picker-opt', '#选题')
 })()
+
+// ?when=1：录入框里打开「时间」小框
+if (q.get('when') === '1') (async () => {
+  await wait(1500); document.querySelectorAll('.wk-picker-btn')[2]?.click()
+})()

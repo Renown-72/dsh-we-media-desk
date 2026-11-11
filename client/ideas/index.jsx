@@ -309,10 +309,10 @@ export function IdeasPanel({ gatherRequest } = {}) {
     setRelated({ anchorId: anchor.id, ids, label: labelOf(anchor) })
   }, [])
 
-  const addText = useCallback((input, tags = [], point, script) => {
+  const addText = useCallback((input, tags = [], point, script, at) => {
     // 粘贴、拖入的文字里也可能带 #标签
     const parts = splitHashtags(input)
-    const idea = store.addFromInput(parts.text, { tags: [...tags, ...parts.tags], script, hint: point && { point } })
+    const idea = store.addFromInput(parts.text, { tags: [...tags, ...parts.tags], script, at, hint: point && { point } })
     flash(idea.id)
     showRelated(idea)
     return idea
@@ -325,7 +325,7 @@ export function IdeasPanel({ gatherRequest } = {}) {
   }, [store.addFiles, flash])
 
   // ＋ 弹出的录入框：记下后自动收起
-  const onCaptureText = useCallback((text, tags, script) => { const it = addText(text, tags, undefined, script); setCaptureOpen(false); return it }, [addText])
+  const onCaptureText = useCallback((text, tags, script, at) => { const it = addText(text, tags, undefined, script, at); setCaptureOpen(false); return it }, [addText])
   const onCaptureFiles = useCallback((files, opts) => { setCaptureOpen(false); return addFiles(files, opts) }, [addFiles])
   useEffect(() => { if (captureOpen) setTimeout(() => composerRef.current?.focus(), 30) }, [captureOpen])
 

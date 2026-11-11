@@ -234,6 +234,24 @@ export function normalizeIdeas(list, now = Date.now()) {
   return out
 }
 
+// ---- 自定义记录时间（补记） ----
+
+const p2 = n => String(n).padStart(2, '0')
+// 时间戳 -> <input type="datetime-local"> 的值（本地时间，精确到分）
+export function toLocalInput(ts) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`
+}
+// 反过来；不合法返回 null，晚于 now 的按 now 算（灵感不能记在未来）
+export function fromLocalInput(v, now = Date.now()) {
+  const m = typeof v === 'string' && v.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (!m) return null
+  const [y, mo, d, h, mi] = m.slice(1).map(Number)
+  const t = new Date(y, mo - 1, d, h, mi)
+  if (t.getFullYear() !== y || t.getMonth() !== mo - 1 || t.getDate() !== d || t.getHours() !== h) return null
+  return Math.min(t.getTime(), now)
+}
+
 // ---- 排序 / 筛选 / 统计 ----
 
 // 排序：置顶优先，其次按创建时间倒序（信息流按记录时间排列）。

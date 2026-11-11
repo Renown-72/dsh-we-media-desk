@@ -1,6 +1,6 @@
 // 一张灵感卡片：按类型（文字 / 图片 / 链接 / 视频）渲染；信息流和画布共用。
 import React from 'react'
-import { KINDS, parseTags, siteName, isDirectMedia } from '../../src/ideas.js'
+import { KINDS, parseTags, siteName, isDirectMedia , toLocalInput, fromLocalInput } from '../../src/ideas.js'
 import { fileUrl } from '../storage.js'
 import { Icon } from '../icons.jsx'
 
@@ -99,9 +99,11 @@ function Editor({ idea, onSave, onCancel }) {
   const [text, setText] = useState(idea.text)
   const [tags, setTags] = useState(idea.tags.map(t => '#' + t).join(' '))
   const [script, setScript] = useState(idea.script || '')
+  const [when, setWhen] = useState(toLocalInput(idea.createdAt))
   function save() {
     if (idea.kind === 'text' && !text.trim()) return onCancel()
-    onSave({ text: text.trim().slice(0, 2000), tags: parseTags(tags), script: script.trim().slice(0, 40) || undefined })
+    const createdAt = fromLocalInput(when) || idea.createdAt
+    onSave({ text: text.trim().slice(0, 2000), tags: parseTags(tags), script: script.trim().slice(0, 40) || undefined, createdAt })
   }
   return (
     <div className="wk-editor">
@@ -116,6 +118,11 @@ function Editor({ idea, onSave, onCancel }) {
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }} />
       <input className="wk-field" value={script} placeholder="隶属的脚本（可选）" list="wk-script-options" onChange={e => setScript(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }} />
+      <label className="wk-field-row" title="灵感是什么时候想到的">
+        <span>记录时间</span>
+        <input className="wk-field" type="datetime-local" value={when} max={toLocalInput(Date.now())} onChange={e => setWhen(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onCancel() } }} />
+      </label>
       <div className="wk-editor-actions">
         <button className="wk-btn-text" onClick={onCancel}>取消</button>
         <button className="wk-btn-primary" onClick={save}>保存</button>

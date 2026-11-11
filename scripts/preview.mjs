@@ -194,7 +194,7 @@ if (serveOnly) {
     ['canvas-light.png', '?fresh=1&mode=canvas'],
     ['canvas-dark.png', '?fresh=1&mode=canvas&dark=1'],
     ['feed-light.png', '?fresh=1&mode=feed'],
-    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1'], ['month-light.png', '?fresh=1&mode=canvas&unit=month'], ['month-dark.png', '?fresh=1&mode=canvas&unit=month&dark=1'], ['gather.png', '?fresh=1&mode=canvas&gather=1'], ['picker.png', '?fresh=1&mode=canvas&capture=1&picker=1'], ['schedule-light.png', '?fresh=1&tab=schedule'], ['schedule-dark.png', '?fresh=1&tab=schedule&dark=1'], ['script-edit.png', '?fresh=1&tab=schedule&open=s_demo1']] : []),
+    ...(args.includes('--all') ? [['feed-dark.png', '?fresh=1&mode=feed&dark=1'], ['capture.png', '?fresh=1&mode=canvas&capture=1'], ['month-light.png', '?fresh=1&mode=canvas&unit=month'], ['month-dark.png', '?fresh=1&mode=canvas&unit=month&dark=1'], ['gather.png', '?fresh=1&mode=canvas&gather=1'], ['picker.png', '?fresh=1&mode=canvas&capture=1&picker=1'], ['schedule-light.png', '?fresh=1&tab=schedule'], ['schedule-dark.png', '?fresh=1&tab=schedule&dark=1'], ['script-edit.png', '?fresh=1&tab=schedule&open=s_demo1'], ['when.png', '?fresh=1&mode=canvas&capture=1&when=1']] : []),
   ]
   for (const [name, q] of jobs) {
     await seed(base) // 每张图都从同一份示例数据开始

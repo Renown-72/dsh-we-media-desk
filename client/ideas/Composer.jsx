@@ -1,6 +1,6 @@
 // 录入框：一句话、网址或分享文案；#标签 可直接写在文字里，也可在下面的「脚本」「标签」小框里选；可粘贴或选择图片、视频。
 import React from 'react'
-import { extractUrl, classifyUrl, splitHashtags, KINDS } from '../../src/ideas.js'
+import { extractUrl, classifyUrl, splitHashtags, KINDS, toLocalInput, fromLocalInput } from '../../src/ideas.js'
 import { Icon } from '../icons.jsx'
 
 const { useState, useRef, useEffect, useLayoutEffect, useImperativeHandle, forwardRef } = React
@@ -72,9 +72,70 @@ function Picker({ icon, label, prefix = '', placeholder, options, value, multi, 
   )
 }
 
+// 「时间」小框：默认「现在」；补记时选一个过去的时间
+function whenLabel(ts) {
+  if (!ts) return '现在'
+  const d = new Date(ts)
+  const now = new Date()
+  const hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')
+  const days = Math.round((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5)
+  if (days === 0) return '今天 ' + hm
+  if (days === 1) return '昨天 ' + hm
+  if (days === 2) return '前天 ' + hm
+  return `${d.getFullYear() === now.getFullYear() ? '' : d.getFullYear() + '/'}${d.getMonth() + 1}/${d.getDate()} ${hm}`
+}
+
+function TimePicker({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const close = e => { if (!boxRef.current?.contains(e.target)) setOpen(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+  const now = Date.now()
+  const quick = [
+    ['1 小时前', now - 36e5],
+    ['今早 9 点', new Date(new Date().setHours(9, 0, 0, 0)).getTime()],
+    ['昨晚 9 点', new Date(new Date(now - 864e5).setHours(21, 0, 0, 0)).getTime()],
+    ['昨天这时候', now - 864e5],
+  ].filter(([, t]) => t <= now)
+  return (
+    <div className="wk-picker" ref={boxRef}>
+      <button type="button" className={'wk-picker-btn' + (value ? ' is-set' : '') + (open ? ' is-open' : '')} onClick={() => setOpen(v => !v)}
+        title="灵感是什么时候想到的；来不及记的可以补记">
+        <Icon name="calendar" size={13} />
+        <span className="wk-picker-label">时间</span>
+        <span className="wk-picker-value">{whenLabel(value)}</span>
+        {value > 0 && (
+          <span className="wk-picker-clear" role="button" aria-label="改回现在"
+            onClick={e => { e.stopPropagation(); onChange(0) }}><Icon name="close" size={11} /></span>
+        )}
+      </button>
+      {open && (
+        <div className="wk-picker-pop wk-time-pop">
+          <div className="wk-pop-title">什么时候想到的？</div>
+          <input type="datetime-local" className="wk-picker-input" max={toLocalInput(now)}
+            value={toLocalInput(value || now)}
+            onChange={e => { const t = fromLocalInput(e.target.value); if (t) onChange(Math.abs(t - Date.now()) < 60000 ? 0 : t) }}
+            onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false) } if (e.key === 'Enter') setOpen(false) }} />
+          <div className="wk-time-quick">
+            <button type="button" className={'wk-chip' + (!value ? ' is-active' : '')} onClick={() => { onChange(0); setOpen(false) }}>现在</button>
+            {quick.map(([label, t]) => (
+              <button type="button" key={label} className="wk-chip" onClick={() => { onChange(t); setOpen(false) }}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export const Composer = forwardRef(function Composer({ onText, onFiles, scripts = [], tagOptions = [], script = '', onScript }, ref) {
   const [draft, setDraft] = useState('')
   const [picked, setPicked] = useState([])
+  const [at, setAt] = useState(0) // 0 = 现在
   const [error, setError] = useState('')
   const areaRef = useRef(null)
   const fileRef = useRef(null)
@@ -97,9 +158,10 @@ export const Composer = forwardRef(function Composer({ onText, onFiles, scripts 
   function submit() {
     if (!text && !inlineTags.length) return
     try {
-      onText(text, tags, script)
+      onText(text, tags, script, at || undefined)
       setDraft('')
       setPicked([])
+      setAt(0)
       setError('')
     } catch (err) {
       setError(err.message)
@@ -112,15 +174,16 @@ export const Composer = forwardRef(function Composer({ onText, onFiles, scripts 
     if (!files.length) return
     e.preventDefault()
     e.stopPropagation()
-    onFiles(files, { tags, text, script })
+    onFiles(files, { tags, text, script, at: at || undefined })
     setDraft('')
     setPicked([])
+    setAt(0)
   }
 
   function onPick(e) {
     const files = [...e.target.files]
     e.target.value = ''
-    if (files.length) { onFiles(files, { tags, text, script }); setDraft(''); setPicked([]) }
+    if (files.length) { onFiles(files, { tags, text, script, at: at || undefined }); setDraft(''); setPicked([]); setAt(0) }
   }
 
   return (
@@ -152,6 +215,7 @@ export const Composer = forwardRef(function Composer({ onText, onFiles, scripts 
           options={scripts} emptyText="还没有脚本，输入名字新建一个" />
         <Picker icon="hash" label="标签" prefix="#" placeholder="未选" value={picked} multi onChange={setPicked}
           options={[...new Set([...tagOptions, ...picked])]} emptyText="还没有标签，输入名字新建一个" />
+        <TimePicker value={at} onChange={setAt} />
         {(error || draft) && <div className="wk-compose-hint">
           {error ? <span className="wk-error">{error}</span> : draft ? (
             <>
