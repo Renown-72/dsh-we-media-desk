@@ -141,8 +141,9 @@ function centerOf(rects) {
 // 周表卡片在画布上占的区域（以中心点定位）
 export const BOARD_SIZE = { w: 720, h: 720 }
 
-export function boardRect(center) {
-  return { x: Math.round(center.x - BOARD_SIZE.w / 2), y: Math.round(center.y - BOARD_SIZE.h / 2), ...BOARD_SIZE }
+// 周表高度随内容变；上边缘固定在中心点上方 BOARD_SIZE.h / 2，往下长
+export function boardRect(center, h = BOARD_SIZE.h) {
+  return { x: Math.round(center.x - BOARD_SIZE.w / 2), y: Math.round(center.y - BOARD_SIZE.h / 2), w: BOARD_SIZE.w, h: Math.round(h) }
 }
 
 // 和周表重叠的卡片（需要挪开）

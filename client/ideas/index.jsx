@@ -18,6 +18,7 @@ const { useState, useMemo, useEffect, useRef, useCallback } = React
 const MODE_KEY = 'we-media-desk:ideas-mode'
 const CANVAS_KEY = 'we-media-desk:canvas-view'
 const BOARD_KEY = 'we-media-desk:board-center'
+const BOARD_H_KEY = 'we-media-desk:board-heights'
 const OLD_HERO_KEY = 'we-media-desk:hero-pos' // 旧版首屏的左上角位置（600×340）
 const HIGHLIGHT_MS = 2400
 const DEFAULT_VIEW = { x: 0, y: 0, zoom: 0.9 }
@@ -180,7 +181,20 @@ export function IdeasPanel() {
     writeLocal(BOARD_KEY, center)
     return center
   })
-  const hero = useMemo(() => boardRect(boardCenter), [boardCenter])
+  // 周表的实际高度（周 / 月、灵感多少都会变），量到后再算周围卡片的避让
+  // 周、月两种高度都记下来，占位取较高的那个——来回切换时周围的卡片不用跟着挪来挪去
+  const [boardHs, setBoardHs] = useState(() => readLocal(BOARD_H_KEY, null) || {})
+  const onBoardHeight = useCallback(h => {
+    if (!(h > 0)) return
+    setBoardHs(prev => {
+      if (Math.abs((prev[boardUnit] || 0) - h) <= 1) return prev
+      const next = { ...prev, [boardUnit]: Math.round(h) }
+      writeLocal(BOARD_H_KEY, next)
+      return next
+    })
+  }, [boardUnit])
+  const boardH = Math.max(boardHs.week || 0, boardHs.month || 0) || 520
+  const hero = useMemo(() => boardRect(boardCenter, boardH), [boardCenter, boardH])
 
   // 压在周表上的卡片（比如周表变大了、或者被拖上去）挪到旁边的空位
   useEffect(() => {
@@ -200,7 +214,7 @@ export function IdeasPanel() {
   useEffect(() => {
     if (mode !== 'canvas' || view || !viewportRef.current) return
     const el = viewportRef.current
-    const zoom = Math.min(1, (el.clientHeight - 150) / BOARD_SIZE.h, (el.clientWidth - 80) / BOARD_SIZE.w)
+    const zoom = Math.min(1, (el.clientHeight - 150) / hero.h, (el.clientWidth - 80) / BOARD_SIZE.w)
     setView({ zoom, x: Math.round(el.clientWidth / 2 - (hero.x + hero.w / 2) * zoom), y: Math.round(el.clientHeight / 2 - (hero.y + hero.h / 2) * zoom) })
   }, [mode, view, hero])
 
@@ -424,6 +438,7 @@ export function IdeasPanel() {
       onNext={nextWeek}
       onThisWeek={thisWeek}
       onUnit={changeUnit}
+      onHeight={mode === 'canvas' ? onBoardHeight : undefined}
       onOpenIdea={openIdea}
     />
   )

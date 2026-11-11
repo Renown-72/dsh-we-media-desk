@@ -1,11 +1,15 @@
-// 周表 / 月表：灵感概览——六个数据格、每日灵感预览（周：每天一列；月：月历）、一句小结。
-import React from 'react'
+// 周表 / 月表：灵感概览——一排六个方块数据格、每日灵感（周：每天一摞邮票；月：月历里的小邮票）、一句小结。
+// 高度随内容变化，onHeight 把实际高度报给画布，好让周围的卡片让开。
+import React, { useLayoutEffect, useRef } from 'react'
 import { isDirectMedia } from '../../src/ideas.js'
 import { fileUrl } from '../storage.js'
 import { Icon } from '../icons.jsx'
+import { hash } from './layout.js'
 
-const MAX_PER_DAY = 5
-const MAX_PER_CELL = 3
+const MAX_STACK = 8   // 一天最多叠几张邮票
+const STAMP_H = 104
+const STACK_STEP = 28 // 下一张压上来时，上一张露出的高度
+const MAX_PER_CELL = 4
 const SHORT_DAY = ['一', '二', '三', '四', '五', '六', '日']
 const KIND_ICON = { text: 'text', image: 'image', link: 'link', video: 'play' }
 
@@ -30,40 +34,33 @@ function snippet(it) {
   return (it.text || it.preview?.title || it.url || '').replace(/\s+/g, ' ').trim()
 }
 
-function MiniIdea({ idea, onOpen }) {
-  const thumb = thumbOf(idea)
-  const text = snippet(idea)
-  const time = new Date(idea.createdAt)
-  const hm = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
-  return (
-    <button className={'wk-mini-idea is-' + (idea.kind || 'text') + (thumb ? ' has-thumb' : '') + (idea.done ? ' is-done' : '')}
-      title={`${hm} · ${text || '（无文字）'}`} onClick={() => onOpen(idea.id)}>
-      {thumb
-        ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" draggable={false} />
-        : <span className="wk-mini-text">{text}</span>}
-      <span className="wk-mini-meta">
-        <Icon name={KIND_ICON[idea.kind || 'text']} size={10} />{hm}
-        {idea.done && <Icon name="check" size={10} stroke={2.6} className="wk-mini-done" />}
-      </span>
-    </button>
-  )
-}
-
 function hmOf(ts) {
   const d = new Date(ts)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-// 月历格子里的小方块：有图显示缩略图，否则显示类型图标
-function IdeaChip({ idea, onOpen }) {
+// 邮票的歪斜和左右错位，按 id 固定
+function jitter(id, i) {
+  const h = hash(id + ':' + i)
+  return { rot: ((h % 600) / 100 - 3).toFixed(2) + 'deg', dx: ((h >> 9) % 7) - 3 + 'px' }
+}
+
+function Stamp({ idea, onOpen, style }) {
   const thumb = thumbOf(idea)
+  const text = snippet(idea)
+  const hm = hmOf(idea.createdAt)
   return (
-    <button className={'wk-chip is-' + (idea.kind || 'text') + (idea.done ? ' is-done' : '')}
-      title={`${hmOf(idea.createdAt)} · ${snippet(idea) || '（无文字）'}${idea.done ? ' · 已完稿' : ''}`}
-      onClick={() => onOpen(idea.id)}>
-      {thumb
-        ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" draggable={false} />
-        : <Icon name={KIND_ICON[idea.kind || 'text']} size={11} />}
+    <button className={'wk-stamp-wrap' + (idea.done ? ' is-done' : '')} style={style}
+      title={`${hm} · ${text || '（无文字）'}${idea.done ? ' · 已完稿' : ''}`} onClick={() => onOpen(idea.id)}>
+      <span className={'wk-stamp is-' + (idea.kind || 'text') + (thumb ? ' has-thumb' : '')}>
+        <span className="wk-stamp-face">
+          {thumb
+            ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" draggable={false} />
+            : <span className="wk-stamp-text">{text || '（无文字）'}</span>}
+        </span>
+        <span className="wk-stamp-meta"><Icon name={KIND_ICON[idea.kind || 'text']} size={9} />{hm}</span>
+      </span>
+      {idea.done && <span className="wk-postmark" aria-label="已完稿">完稿</span>}
     </button>
   )
 }
@@ -71,19 +68,46 @@ function IdeaChip({ idea, onOpen }) {
 function WeekDays({ days, onOpen }) {
   return (
     <div className="wk-week">
-      {days.map(d => (
-        <div key={d.key} className={'wk-weekday' + (d.today ? ' is-today' : '') + (d.future ? ' is-future' : '')}>
-          <div className="wk-weekday-head">
-            <span>{d.label}</span><b>{d.date}</b>
+      {days.map(d => {
+        const shown = d.items.slice(-MAX_STACK)
+        const hidden = d.items.length - shown.length
+        return (
+          <div key={d.key} className={'wk-weekday' + (d.today ? ' is-today' : '') + (d.future ? ' is-future' : '')}>
+            <div className="wk-weekday-head">
+              <span>{d.label}</span><b>{d.date}</b>
+            </div>
+            {hidden > 0 && <span className="wk-weekday-more">更早还有 {hidden} 条</span>}
+            {shown.length
+              ? (
+                <div className="wk-stack" style={{ height: STAMP_H + (shown.length - 1) * STACK_STEP }}>
+                  {shown.map((it, i) => {
+                    const j = jitter(it.id, i)
+                    return <Stamp key={it.id} idea={it} onOpen={onOpen} style={{ top: i * STACK_STEP, zIndex: i + 1, '--rot': j.rot, '--dx': j.dx }} />
+                  })}
+                </div>
+              )
+              : <span className="wk-stamp-slot">{d.future ? '' : '—'}</span>}
           </div>
-          <div className="wk-weekday-list">
-            {d.items.slice(-MAX_PER_DAY).reverse().map(it => <MiniIdea key={it.id} idea={it} onOpen={onOpen} />)}
-            {d.items.length === 0 && <span className="wk-weekday-empty">{d.future ? '' : '—'}</span>}
-            {d.items.length > MAX_PER_DAY && <span className="wk-weekday-more">还有 {d.items.length - MAX_PER_DAY} 条</span>}
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
+  )
+}
+
+// 月历格子里的小邮票：有图显示缩略图，否则显示类型图标；多了就叠起来
+function MiniStamp({ idea, onOpen, i }) {
+  const thumb = thumbOf(idea)
+  const j = jitter(idea.id, i)
+  return (
+    <button className={'wk-ministamp-wrap' + (idea.done ? ' is-done' : '')} style={{ '--rot': j.rot, zIndex: i + 1 }}
+      title={`${hmOf(idea.createdAt)} · ${snippet(idea) || '（无文字）'}${idea.done ? ' · 已完稿' : ''}`}
+      onClick={() => onOpen(idea.id)}>
+      <span className={'wk-ministamp is-' + (idea.kind || 'text')}>
+        {thumb
+          ? <img src={thumb} alt="" loading="lazy" referrerPolicy="no-referrer" draggable={false} />
+          : <Icon name={KIND_ICON[idea.kind || 'text']} size={10} />}
+      </span>
+    </button>
   )
 }
 
@@ -93,8 +117,7 @@ function MonthDays({ days, lead, onOpen }) {
       {SHORT_DAY.map(d => <div key={d} className="wk-month-wd">{d}</div>)}
       {Array.from({ length: lead }, (_, i) => <div key={'pad' + i} className="wk-month-pad" />)}
       {days.map(d => {
-        // 放不下时少放一个，给 +N 腾地方
-        const shown = d.items.slice(-(d.items.length > MAX_PER_CELL ? MAX_PER_CELL - 1 : MAX_PER_CELL)).reverse()
+        const shown = d.items.slice(-MAX_PER_CELL)
         const more = d.items.length - shown.length
         return (
           <div key={d.key} className={'wk-month-day' + (d.today ? ' is-today' : '') + (d.future ? ' is-future' : '') + (d.items.length ? ' has-items' : '')}>
@@ -103,8 +126,8 @@ function MonthDays({ days, lead, onOpen }) {
               {d.items.length > 0 && <span>{d.items.length} 条</span>}
             </div>
             {d.items.length > 0 && (
-              <div className="wk-month-chips">
-                {shown.map(it => <IdeaChip key={it.id} idea={it} onOpen={onOpen} />)}
+              <div className="wk-month-stamps">
+                {shown.map((it, i) => <MiniStamp key={it.id} idea={it} onOpen={onOpen} i={i} />)}
                 {more > 0 && <span className="wk-chip-more">+{more}</span>}
               </div>
             )}
@@ -121,14 +144,23 @@ function compare(total, prev, unitName) {
   return total > prev ? `比${unitName}多 ${total - prev}` : `比${unitName}少 ${prev - total}`
 }
 
-export const WeekBoard = React.memo(function WeekBoard({ stats: s, onPrev, onNext, onThisWeek, onUnit, onOpenIdea }) {
+export const WeekBoard = React.memo(function WeekBoard({ stats: s, onPrev, onNext, onThisWeek, onUnit, onOpenIdea, onHeight }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !onHeight) return
+    onHeight(el.offsetHeight)
+    const ro = new ResizeObserver(() => onHeight(el.offsetHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [onHeight])
   const fast = s.fastest
   const month = s.unit === 'month'
   const U = month ? '月' : '周'
   const prevName = month ? '上个月' : '上周'
   const thisName = month ? '本月' : '本周'
   return (
-    <section className="wk-board" aria-label={month ? '月表' : '周表'}>
+    <section ref={ref} className={'wk-board is-' + s.unit} aria-label={month ? '月表' : '周表'}>
       <header className="wk-board-head">
         <div>
           <div className="wk-board-title">{s.isCurrent ? `${thisName}灵感` : month ? '那个月的灵感' : '那一周的灵感'}</div>
@@ -159,7 +191,7 @@ export const WeekBoard = React.memo(function WeekBoard({ stats: s, onPrev, onNex
       </div>
 
       <div className="wk-board-sec is-days">
-        <div className="wk-sec-title">每日灵感</div>
+        <div className="wk-sec-title">每日灵感<span>{month ? '点小邮票看那条灵感' : '一条灵感一张邮票，记得越多叠得越高'}</span></div>
         {month
           ? <MonthDays days={s.days} lead={s.lead} onOpen={onOpenIdea} />
           : <WeekDays days={s.days} onOpen={onOpenIdea} />}
