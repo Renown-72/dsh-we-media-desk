@@ -3,49 +3,86 @@
 // 通过 ctx.slots 注册到 DSH 的侧栏入口与主面板。
 import React from 'react'
 import styles from './styles.css'
-import { IdeasPanel } from './ideas.jsx'
+import { IdeasPanel } from './ideas/index.jsx'
+import { SchedulePanel } from './schedule/index.jsx'
+import { Icon } from './icons.jsx'
 
 const { useState } = React
 
 const TABS = [
-  { id: 'ideas', label: '灵感' },
-  { id: 'contents', label: '内容' },
-  { id: 'schedule', label: '排期' },
-  { id: 'review', label: '复盘' },
-  { id: 'style', label: '风格' },
+  { id: 'ideas', label: '灵感', icon: 'lightbulb' },
+  { id: 'schedule', label: '排期', icon: 'calendar' },
+  { id: 'review', label: '复盘', icon: 'chart', soon: '记下每条内容的数据，看看什么最受欢迎。' },
+  { id: 'style', label: '风格', icon: 'palette', soon: '沉淀你的写作风格，让成稿更像你。' },
 ]
 
-function Placeholder({ name }) {
-  return <div className="wk-panel"><p className="wk-empty">{name}页面（待开发）</p></div>
+function ComingSoon({ tab }) {
+  return (
+    <div className="wk-soon">
+      <div className="wk-soon-card">
+        <span className="wk-soon-icon"><Icon name={tab.icon} size={26} /></span>
+        <h2>{tab.label}</h2>
+        <p>{tab.soon}</p>
+        <span className="wk-soon-tag">正在制作</span>
+      </div>
+    </div>
+  )
 }
 
 export function App() {
-  const [tab, setTab] = useState('ideas')
+  const [tab, setTab] = useState(() => {
+    try {
+      const t = localStorage.getItem('we-media-desk:tab') || 'ideas'
+      return t === 'contents' || t === 'scripts' ? 'schedule' : t // 旧版的「内容」「脚本」页并进了「排期」
+    } catch { return 'ideas' }
+  })
+  // 从脚本页跳到灵感页，并在画布上汇聚这个脚本的灵感
+  const [gatherRequest, setGatherRequest] = useState(null)
+  const gatherScript = React.useCallback(name => {
+    setGatherRequest({ picks: [{ type: 'script', value: name }], n: Date.now() })
+    pick('ideas')
+  }, [])
+  const current = TABS.find(t => t.id === tab) || TABS[0]
+  function pick(id) {
+    setTab(id)
+    try { localStorage.setItem('we-media-desk:tab', id) } catch { /* ignore */ }
+  }
   return (
     <div className="wk-root">
       <style>{styles}</style>
-      <header className="wk-header">
-        <h1 className="wk-title">自媒体工作台</h1>
-        <nav className="wk-tabs">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              className={'wk-tab' + (tab === t.id ? ' is-active' : '')}
-              onClick={() => setTab(t.id)}
-            >{t.label}</button>
-          ))}
-        </nav>
-      </header>
+      <nav className="wk-float wk-nav" aria-label="自媒体工作台">
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            className={'wk-nav-tab' + (current.id === t.id ? ' is-active' : '')}
+            onClick={() => pick(t.id)}
+          >
+            <Icon name={t.icon} size={15} />{t.label}
+          </button>
+        ))}
+      </nav>
       <main className="wk-main">
-        {tab === 'ideas' ? <IdeasPanel /> : <Placeholder name={TABS.find(t => t.id === tab).label} />}
+        {current.id === 'ideas' ? <IdeasPanel gatherRequest={gatherRequest} />
+          : current.id === 'schedule' ? <SchedulePanel onGather={gatherScript} />
+          : <ComingSoon tab={current} />}
       </main>
     </div>
   )
 }
 
-// 侧栏图标/入口
-export function SidebarEntry() {
-  return React.createElement('div', { className: 'wk-sidebar-entry' }, '📝 自媒体工作台')
+// 侧栏图标：使用 DSH 自带图标系统（dsw-icon-* sprite），与其他插件完全一致。
+// DSH 的 sidebar.panellist 图标组件接收 { size }。
+export function SidebarEntry({ size = 16 } = {}) {
+  return React.createElement(
+    'svg',
+    {
+      width: size,
+      height: size,
+      'data-icon': 'dsw-icon-list-pen-outline-regular',
+      'aria-hidden': 'true',
+    },
+    React.createElement('use', { href: '#dsw-icon-list-pen-outline-regular' }),
+  )
 }
 
 // DSH 客户端插件约定：inject slots，apply 里注册槽位。
