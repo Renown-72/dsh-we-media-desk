@@ -44,6 +44,8 @@ test('weekStats 统计本周灵感、活跃天数、高峰时段、完稿、最�
   assert.equal(s.fastest.id, 'b')
   assert.equal(s.fastest.label, '1 天 12 小时')
   assert.deepEqual(s.topTag, { tag: '封面', count: 2 })
+  assert.equal(s.undone, 3)
+  assert.deepEqual(s.oldestUndone, { id: 'a', age: '2 天 20 小时' })
   assert.deepEqual(s.days.map(d => d.items.length), [2, 0, 1, 1, 0, 0, 0])
   assert.equal(s.days[3].today, true)
   assert.equal(s.days[4].future, true)

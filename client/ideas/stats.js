@@ -94,6 +94,10 @@ export function periodStats(ideas, { now = Date.now(), offset = 0, unit = 'week'
   const periodMax = Math.max(0, ...periods.map(p => p.count))
   const peak = periodMax ? periods.findIndex(p => p.count === periodMax) : null
   const topTag = topOf(tags)
+  // 这段时间记下、还没完稿的；最久的一条放了多久（按现在算）
+  const undoneList = inWeek.filter(it => !it.done)
+  const oldest = undoneList[0]
+  const oldestUndone = oldest ? { id: oldest.id, age: formatDuration(now - oldest.createdAt) } : null
 
   // 本周完稿里，从记下到完稿用时最短的一条
   const doneInWeek = live.filter(it => it.done && it.doneAt >= start && it.doneAt < end)
@@ -125,6 +129,8 @@ export function periodStats(ideas, { now = Date.now(), offset = 0, unit = 'week'
     done: doneInWeek.length,
     doneOfWeek: inWeek.filter(it => it.done).length,
     fastest,
+    undone: undoneList.length,
+    oldestUndone,
     topTag: topTag ? { tag: topTag[0], count: topTag[1] } : null,
     periods,
     periodMax,

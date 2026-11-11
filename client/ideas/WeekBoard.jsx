@@ -154,7 +154,8 @@ export const WeekBoard = React.memo(function WeekBoard({ stats: s, onPrev, onNex
         <Tile label="完稿灵感" value={s.done} sub={s.doneOfWeek ? `${thisName}记下的已完稿 ${s.doneOfWeek} 条` : `${thisName}标记完稿的数量`} />
         <Tile label="最快完稿" value={fast ? fast.label : '—'} sub={fast ? (fast.text ? `「${fast.text}」` : '从记下到完稿') : '从记下到完稿的最短用时'}
           onClick={fast ? () => onOpenIdea(fast.id) : undefined} title={fast ? `从记下到完稿用了 ${fast.label}：${fast.text || '（无文字）'}` : undefined} />
-        <Tile label="最常用标签" value={s.topTag ? '#' + s.topTag.tag : '—'} sub={s.topTag ? `用了 ${s.topTag.count} 次` : '写 #标签 来归类'} />
+        <Tile label="未完稿灵感" value={s.undone} sub={s.oldestUndone ? `最久的一条放了 ${s.oldestUndone.age}` : s.total ? '全部完稿了' : '还没有记录'}
+          onClick={s.oldestUndone ? () => onOpenIdea(s.oldestUndone.id) : undefined} title={s.oldestUndone ? '看看放得最久的那条' : undefined} />
       </div>
 
       <div className="wk-board-sec is-days">
